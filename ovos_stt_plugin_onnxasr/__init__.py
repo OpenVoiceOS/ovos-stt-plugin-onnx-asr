@@ -10,7 +10,8 @@ class OnnxASR(STT):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         model_id = self.config.get("model", "nemo-canary-1b-v2")
-        self.onnx_model = onnx_asr.load_model(model_id)
+        quantization = self.config.get("quantization")
+        self.onnx_model = onnx_asr.load_model(model_id, quantization=quantization)
 
     @classproperty
     def available_languages(cls) -> set:
@@ -36,7 +37,9 @@ class OnnxASR(STT):
         return text
 
 if __name__ == "__main__":
-    b = OnnxASR({"lang": "en", "model": "nemo-canary-1b-v2"})
+    b = OnnxASR({"lang": "en",
+                 "model": "nemo-canary-1b-v2",
+                 "quantization": "int8"})
 
     eu = "/home/miro/PycharmProjects/ovos-stt-plugin-vosk/jfk.wav"
     audio = AudioData.from_file(eu)
