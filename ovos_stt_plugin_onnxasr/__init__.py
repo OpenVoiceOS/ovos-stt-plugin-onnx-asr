@@ -1,9 +1,10 @@
-from typing import Optional
+from typing import List, Optional
 
 import onnx_asr
 from ovos_plugin_manager.templates.stt import STT
 from ovos_plugin_manager.utils.audio import AudioData
 from ovos_utils import classproperty
+from ovos_utils.log import LOG
 
 
 class OnnxASR(STT):
@@ -11,7 +12,34 @@ class OnnxASR(STT):
         super().__init__(*args, **kwargs)
         model_id = self.config.get("model", "nemo-canary-1b-v2")
         quantization = self.config.get("quantization")
-        self.onnx_model = onnx_asr.load_model(model_id, quantization=quantization)
+        providers = self._get_providers()
+        if providers:
+            LOG.info(f"onnx-asr using providers: {providers}")
+        self.onnx_model = onnx_asr.load_model(model_id,
+                                              quantization=quantization,
+                                              providers=providers)
+
+    def _get_providers(self) -> Optional[List[str]]:
+        """
+        Resolve the onnxruntime execution providers from plugin config.
+
+        ``providers`` (an explicit list of onnxruntime provider names) takes
+        precedence; otherwise ``use_cuda: true`` selects CUDA with a CPU
+        fallback. When neither is set, returns None so onnx-asr/onnxruntime
+        pick their default (CPU).
+
+        GPU execution requires ``onnxruntime-gpu`` installed in place of the
+        default ``onnxruntime`` (plus a matching CUDA/cuDNN runtime).
+
+        Returns:
+            list[str] | None: Ordered provider list, or None for the default.
+        """
+        providers = self.config.get("providers")
+        if providers:
+            return list(providers)
+        if self.config.get("use_cuda"):
+            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        return None
 
     @classproperty
     def available_languages(cls) -> set:

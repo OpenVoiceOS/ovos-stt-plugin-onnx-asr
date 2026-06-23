@@ -37,6 +37,26 @@ Configure the plugin in your `mycroft.conf` or user config.
 | --- | --- | --- |
 | `model` | `nemo-canary-1b-v2` | The model ID to load. Can be a specific alias (like `nemo-parakeet-tdt-0.6b-v3`) or a Hugging Face repo ID. |
 | `quantization` | `null` | Set to `"int8"` to use quantized models for faster inference and lower memory usage. |
+| `use_cuda` | `false` | Run on the GPU via the CUDA execution provider (with a CPU fallback). |
+| `providers` | `null` | Explicit list of onnxruntime execution providers, e.g. `["CUDAExecutionProvider", "CPUExecutionProvider"]` or `["TensorrtExecutionProvider"]`. Takes precedence over `use_cuda`. |
+
+### GPU acceleration
+
+To run on the GPU, install `onnxruntime-gpu` (in place of the default `onnxruntime`) with a matching CUDA/cuDNN runtime, then set `use_cuda`:
+
+```json
+{
+  "stt": {
+    "module": "ovos-stt-plugin-onnx-asr",
+    "ovos-stt-plugin-onnx-asr": {
+      "model": "nemo-parakeet-tdt-0.6b-v3",
+      "use_cuda": true
+    }
+  }
+}
+```
+
+For finer control (e.g. TensorRT) set `providers` directly; it overrides `use_cuda`.
 
 ## Supported Models
 
