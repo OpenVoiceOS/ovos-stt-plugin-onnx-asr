@@ -36,7 +36,7 @@ Configure the plugin in your `mycroft.conf` or user config.
 | Option | Default | Description |
 | --- | --- | --- |
 | `model` | `nemo-canary-1b-v2` | The model ID to load. Can be a specific alias (like `nemo-parakeet-tdt-0.6b-v3`) or a Hugging Face repo ID. |
-| `quantization` | `null` | Set to `"int8"` to use quantized models for faster inference and lower memory usage. |
+| `quantization` | `null` | Set to `"int8"` to load the quantized weights for faster, lower-memory CPU inference. Requires the repo to ship `*.int8.onnx` files; loading fails if they are absent. int8 trades a small accuracy drop (typically a few WER points, less on larger models) for ~3-4x smaller models. |
 | `use_cuda` | `false` | Run on the GPU via the CUDA execution provider (with a CPU fallback). |
 | `providers` | `null` | Explicit list of onnxruntime execution providers, e.g. `["CUDAExecutionProvider", "CPUExecutionProvider"]` or `["TensorrtExecutionProvider"]`. Takes precedence over `use_cuda`. |
 
@@ -85,8 +85,9 @@ families.
 
 Language-specific models live in the
 [OpenVoiceOS/stt-asr-onnx](https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx)
-collection and are loaded by repo id. These ship **fp32 only** — do not set
-`quantization: int8` for them.
+collection and are loaded by repo id. Most ship both fp32 and int8 weights, so
+`quantization: "int8"` works; a few older ones are fp32-only (setting int8 then
+fails to load). Whisper-based entries in the collection are fp32-only.
 
 | `model` | Language | Architecture |
 | --- | --- | --- |
