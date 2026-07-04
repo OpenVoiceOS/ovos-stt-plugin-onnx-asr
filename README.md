@@ -60,24 +60,49 @@ For finer control (e.g. TensorRT) set `providers` directly; it overrides `use_cu
 
 ## Supported Models
 
-This plugin supports any model compatible with `onnx-asr`. Common models include:
+The `model` option accepts either a built-in `onnx-asr` alias or any Hugging Face
+repo id whose `config.json` declares a supported `model_type` (NeMo
+Conformer/FastConformer with CTC, RNN-T, TDT or Canary/AED decoder, Whisper, Vosk,
+GigaAM or T-one). Streaming, LLM-decoder and TTS checkpoints are not supported.
 
-**Nvidia NeMo (Multilingual & English)**
+`language` is only meaningful for Whisper and Canary models (and
+`target_language` for Canary); the plugin passes them automatically only to those
+families.
 
-* `nemo-canary-1b-v2` (Multilingual, supports English, German, French, Spanish, etc.)
-* `nemo-parakeet-tdt-0.6b-v3` (Multilingual)
-* `nemo-parakeet-ctc-0.6b` (English)
+### Built-in aliases (Nvidia NeMo, Whisper, GigaAM, Vosk, T-one)
 
-**OpenAI Whisper**
+| Alias | Language(s) |
+| --- | --- |
+| `nemo-canary-1b-v2` | Multilingual (en, de, fr, es, …) |
+| `nemo-parakeet-tdt-0.6b-v3` | Multilingual (25 European langs) |
+| `nemo-parakeet-tdt-0.6b-v2` / `nemo-parakeet-ctc-0.6b` / `nemo-parakeet-rnnt-0.6b` | English |
+| `gigaam-v3-ctc` / `gigaam-v3-rnnt` / `gigaam-v2-ctc` / `gigaam-v2-rnnt` | Russian |
+| `nemo-fastconformer-ru-ctc` / `nemo-fastconformer-ru-rnnt` | Russian |
+| `alphacep/vosk-model-ru` / `alphacep/vosk-model-small-ru` / `t-tech/t-one` | Russian |
+| `whisper-base` / `onnx-community/whisper-large-v3-turbo` | Multilingual |
 
-* `onnx-community/whisper-large-v3-turbo`
+### OpenVoiceOS curated models
 
-**Russian Models (GigaAM)**
+Language-specific models live in the
+[OpenVoiceOS/stt-asr-onnx](https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx)
+collection and are loaded by repo id. These ship **fp32 only** — do not set
+`quantization: int8` for them.
 
-* `gigaam-v3-ctc`
-* `gigaam-v3-rnnt`
+| `model` | Language | Architecture |
+| --- | --- | --- |
+| `OpenVoiceOS/stt-gl-conformer-ctc-large-onnx` | Galician | Conformer-CTC |
+| `OpenVoiceOS/stt-fa-fastconformer-hybrid-large-onnx` | Persian | FastConformer (RNN-T + CTC) |
+| `OpenVoiceOS/parakeet-tdt_ctc-0.6b-ja-onnx` | Japanese | Parakeet TDT+CTC |
+| `OpenVoiceOS/parakeet-ctc-0.6b-vietnamese-onnx` | Vietnamese | Parakeet CTC |
+| `OpenVoiceOS/parakeet-rnnt-110m-da-dk-onnx` | Danish | Parakeet RNN-T |
+| `OpenVoiceOS/parakeet-rnnt-1.1b-cv17-es-ep18-1270h-onnx` | Spanish | Parakeet RNN-T |
+| `OpenVoiceOS/stt-ca-es-conformer-transducer-large-onnx` | Catalan / Spanish | Conformer RNN-T |
+| `OpenVoiceOS/stt-eu-conformer-transducer-large-onnx` | Basque | Conformer RNN-T |
+| `OpenVoiceOS/whisper-large-v3-ca-punctuated-3370h-onnx` | Catalan | Whisper |
+| `OpenVoiceOS/whisper-small-pt-onnx` / `whisper-medium-pt-onnx` / `whisper-large-v3-pt-onnx` | Portuguese | Whisper |
+| `OpenVoiceOS/parakeet-{tdt,rnnt,ctc}-1.1b-onnx` / `parakeet-tdt_ctc-110m-onnx` | English | Parakeet |
 
-For a full list of supported models and benchmarks, see the [onnx-asr repository](https://github.com/istupakov/onnx-asr).
+For the full list of built-in aliases and benchmarks, see the [onnx-asr repository](https://github.com/istupakov/onnx-asr).
 
 ## Credits
 
