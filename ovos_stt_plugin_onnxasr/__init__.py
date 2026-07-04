@@ -18,6 +18,13 @@ class OnnxASR(STT):
         self.onnx_model = onnx_asr.load_model(model_id,
                                               quantization=quantization,
                                               providers=providers)
+        # onnx-asr accepts a `language` hint only for Whisper and Canary models,
+        # and `target_language` only for Canary. Passing them to other
+        # architectures is outside the RecognizeOptions contract, so gate them
+        # on the loaded model family.
+        asr_name = type(self.onnx_model.asr).__name__
+        self._accepts_language = "Whisper" in asr_name or asr_name == "NemoConformerAED"
+        self._accepts_target_language = asr_name == "NemoConformerAED"
 
     def _get_providers(self) -> Optional[List[str]]:
         """
@@ -56,11 +63,16 @@ class OnnxASR(STT):
         Returns:
             transcription (str): Final recognized text for the processed audio.
         """
+        lang = language or self.lang
+        kwargs = {}
+        if self._accepts_language:
+            kwargs["language"] = lang
+        if self._accepts_target_language:
+            kwargs["target_language"] = lang
         text = self.onnx_model.recognize(
             audio.get_np_float32(),
             sample_rate=audio.sample_rate,
-            language=language or self.lang,
-            target_language=language or self.lang
+            **kwargs
         )
         return text
 
