@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.1.1a1) (2026-07-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.0a2...0.1.1a1)
+
+**Merged pull requests:**
+
+- fix: only pass language/target\_language to models that accept them [\#6](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/6) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.1.0a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.1.0a2) (2026-07-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.0a1...0.1.0a2)
