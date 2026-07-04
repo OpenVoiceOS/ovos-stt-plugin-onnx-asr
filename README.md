@@ -126,8 +126,19 @@ FastConformer** (`artpark-iisc-vaani-fastconformer-<lang>-onnx`) adds `hi` `kn`
 | `OpenVoiceOS/stt-eu-conformer-transducer-large-onnx` / `stt-eu-conformer-ctc-large-onnx` / `hitz-eu-conformer-transducer-large-v2-onnx` | Basque | Conformer |
 | `OpenVoiceOS/hitz-eseu-conformer-transducer-large-onnx` / `hitz-bbs-s2tc-conformer-transducer-large-onnx` | Basque + Spanish | Conformer RNN-T |
 
-The collection also contains Whisper conversions for several languages (Portuguese,
-Catalan, and various national-lab finetunes); load those the same way by repo id.
+**Whisper (language-specific finetunes)** — loaded the same way by repo id:
+
+| Language(s) | Model(s) |
+| --- | --- |
+| Portuguese | `remynd`-based `OpenVoiceOS/whisper-{small,medium,large-v3}-pt-onnx` |
+| Catalan / Spanish | `OpenVoiceOS/whisper-large-v3-ca-punctuated-3370h-onnx`, `whisper-large-v3-tiny-caesar-onnx` |
+| Swedish / Norwegian / Finnish / Icelandic | `OpenVoiceOS/kblab-…`, `nbailab-…`, `finnish-nlp-…`, `lvl-…-icelandic-onnx` |
+| French / German / Japanese | `OpenVoiceOS/bofenghuang-…`, `primeline-…`, `kotoba-tech-…` |
+| Thai / Hebrew / Cantonese / Welsh / Turkish / Czech / Indonesian / Korean | `OpenVoiceOS/biodatlab-…`, `ivrit-ai-…`, `alvanlii-…`, `techiaith-…`, `selimc-…`, `mikr-…`, `cahya-…`, `seastar105-…` |
+
+Every curated repo carries a model card with `base_model` metadata pointing to the
+upstream checkpoint and the training source. See the collection for the exhaustive,
+up-to-date list.
 
 For the full list of built-in aliases and benchmarks, see the [onnx-asr repository](https://github.com/istupakov/onnx-asr).
 
