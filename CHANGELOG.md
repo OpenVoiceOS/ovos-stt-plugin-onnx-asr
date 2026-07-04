@@ -1,12 +1,20 @@
 # Changelog
 
-## [0.1.0a1](https://github.com/TigreGotico/ovos-stt-plugin-onnx-asr/tree/0.1.0a1) (2026-06-23)
+## [0.1.0a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.1.0a2) (2026-07-04)
 
-[Full Changelog](https://github.com/TigreGotico/ovos-stt-plugin-onnx-asr/compare/0.0.1...0.1.0a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.0a1...0.1.0a2)
 
 **Merged pull requests:**
 
-- feat: GPU execution provider support \(use\_cuda / providers\) [\#4](https://github.com/TigreGotico/ovos-stt-plugin-onnx-asr/pull/4) ([JarbasAl](https://github.com/JarbasAl))
+- Configure Renovate [\#1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/1) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [0.1.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.1.0a1) (2026-06-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.0.1...0.1.0a1)
+
+**Merged pull requests:**
+
+- feat: GPU execution provider support \(use\_cuda / providers\) [\#4](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/4) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
