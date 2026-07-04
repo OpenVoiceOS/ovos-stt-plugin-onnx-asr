@@ -84,25 +84,50 @@ families.
 
 ### OpenVoiceOS curated models
 
-Language-specific models live in the
+Curated single-language and regional models live in the
 [OpenVoiceOS/stt-asr-onnx](https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx)
-collection and are loaded by repo id. Most ship both fp32 and int8 weights, so
-`quantization: "int8"` works; a few older ones are fp32-only (setting int8 then
-fails to load). Whisper-based entries in the collection are fp32-only.
+collection, converted from reputable NeMo Conformer/Parakeet checkpoints and
+loaded by repo id. Repos are named `<author>-<model>-onnx` to avoid collisions
+between same-named finetunes. Most ship both fp32 and int8 weights, so
+`quantization: "int8"` works (a few large models are fp32-only). See the
+collection for the exhaustive, up-to-date list; the highlights below are grouped
+by language.
+
+**Indian languages — AI4Bharat IndicConformer** (`ai4bharat-indicconformer-<lang>-onnx`,
+CTC), 22 languages: `as` `bn` `brx` `doi` `gu` `hi` `kn` `kok` `ks` `mai` `ml`
+`mni` `mr` `ne` `or` `pa` `sa` `sat` `sd` `ta` `te` `ur`. IISc **Vaani
+FastConformer** (`artpark-iisc-vaani-fastconformer-<lang>-onnx`) adds `hi` `kn`
+`ml` `or` `te` and a `multi` multilingual model.
+
+**European — NVIDIA Conformer** (`nvidia-<lang>-conformer-{ctc,transducer}-large-onnx`):
+`en` (also `-small`, `-transducer-xlarge`), `de`, `fr`, `es`, `it`, `ru`, `ca`,
+`hr` (Croatian), `be` (Belarusian), `eo` (Esperanto), `rw` (Kinyarwanda), and
+`nvidia-kab-conformer-transducer-large-onnx` (Kabyle).
+
+**Parakeet (per-language)**
 
 | `model` | Language | Architecture |
 | --- | --- | --- |
-| `OpenVoiceOS/stt-gl-conformer-ctc-large-onnx` | Galician | Conformer-CTC |
-| `OpenVoiceOS/stt-fa-fastconformer-hybrid-large-onnx` | Persian | FastConformer (RNN-T + CTC) |
-| `OpenVoiceOS/parakeet-tdt_ctc-0.6b-ja-onnx` | Japanese | Parakeet TDT+CTC |
-| `OpenVoiceOS/parakeet-ctc-0.6b-vietnamese-onnx` | Vietnamese | Parakeet CTC |
-| `OpenVoiceOS/parakeet-rnnt-110m-da-dk-onnx` | Danish | Parakeet RNN-T |
+| `OpenVoiceOS/nvidia-fa-fastconformer-hybrid-large-onnx` | Persian | FastConformer (RNN-T + CTC) |
+| `OpenVoiceOS/nvidia-parakeet-tdt_ctc-0.6b-ja-onnx` | Japanese | Parakeet TDT+CTC |
+| `OpenVoiceOS/nvidia-parakeet-ctc-0.6b-vietnamese-onnx` | Vietnamese | Parakeet CTC |
+| `OpenVoiceOS/nvidia-parakeet-rnnt-110m-da-dk-onnx` | Danish | Parakeet RNN-T |
+| `OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-{pl,pt,nl,et,sl}-onnx` | Polish / Portuguese / Dutch / Estonian / Slovenian | Parakeet TDT |
+| `OpenVoiceOS/nvidia-parakeet-{tdt,rnnt,ctc}-1.1b-onnx` / `nvidia-parakeet-tdt_ctc-110m-onnx` | English | Parakeet |
+
+**Iberian**
+
+| `model` | Language | Architecture |
+| --- | --- | --- |
+| `OpenVoiceOS/proxectonos-gl-conformer-ctc-large-onnx` | Galician | Conformer-CTC |
 | `OpenVoiceOS/parakeet-rnnt-1.1b-cv17-es-ep18-1270h-onnx` | Spanish | Parakeet RNN-T |
 | `OpenVoiceOS/stt-ca-es-conformer-transducer-large-onnx` | Catalan / Spanish | Conformer RNN-T |
-| `OpenVoiceOS/stt-eu-conformer-transducer-large-onnx` | Basque | Conformer RNN-T |
-| `OpenVoiceOS/whisper-large-v3-ca-punctuated-3370h-onnx` | Catalan | Whisper |
-| `OpenVoiceOS/whisper-small-pt-onnx` / `whisper-medium-pt-onnx` / `whisper-large-v3-pt-onnx` | Portuguese | Whisper |
-| `OpenVoiceOS/parakeet-{tdt,rnnt,ctc}-1.1b-onnx` / `parakeet-tdt_ctc-110m-onnx` | English | Parakeet |
+| `OpenVoiceOS/bsc-lt-los-conformer-transducer-large-onnx` (+ `-punctuated`) | Languages of Spain (es/ca/gl/eu) | Conformer RNN-T |
+| `OpenVoiceOS/stt-eu-conformer-transducer-large-onnx` / `stt-eu-conformer-ctc-large-onnx` / `hitz-eu-conformer-transducer-large-v2-onnx` | Basque | Conformer |
+| `OpenVoiceOS/hitz-eseu-conformer-transducer-large-onnx` / `hitz-bbs-s2tc-conformer-transducer-large-onnx` | Basque + Spanish | Conformer RNN-T |
+
+The collection also contains Whisper conversions for several languages (Portuguese,
+Catalan, and various national-lab finetunes); load those the same way by repo id.
 
 For the full list of built-in aliases and benchmarks, see the [onnx-asr repository](https://github.com/istupakov/onnx-asr).
 
