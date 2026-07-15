@@ -63,7 +63,8 @@ For finer control (e.g. TensorRT) set `providers` directly; it overrides `use_cu
 The `model` option accepts either a built-in `onnx-asr` alias or any Hugging Face
 repo id whose `config.json` declares a supported `model_type` (NeMo
 Conformer/FastConformer with CTC, RNN-T, TDT or Canary/AED decoder, Whisper, Vosk,
-GigaAM or T-one). Streaming, LLM-decoder and TTS checkpoints are not supported.
+GigaAM, T-one or wav2vec2-CTC). Streaming, LLM-decoder and TTS checkpoints are not
+supported.
 
 `language` is only meaningful for Whisper and Canary models (and
 `target_language` for Canary); the plugin passes them automatically only to those
@@ -104,6 +105,31 @@ fails to load). Whisper-based entries in the collection are fp32-only.
 | `OpenVoiceOS/parakeet-{tdt,rnnt,ctc}-1.1b-onnx` / `parakeet-tdt_ctc-110m-onnx` | English | Parakeet |
 
 For the full list of built-in aliases and benchmarks, see the [onnx-asr repository](https://github.com/istupakov/onnx-asr).
+
+### wav2vec2 models
+
+The plugin bundles a small runtime shim that teaches `onnx-asr` about the
+`wav2vec2-ctc` model type, so wav2vec2 / XLS-R CTC fine-tunes exported to ONNX load
+by repo id with no extra setup. (The shim is inert once
+[onnx-asr#1](https://github.com/istupakov/onnx-asr/pull/1) lands in an installed
+`onnx-asr` release.) These are CTC models, so `language` is not used.
+
+```json
+{
+  "stt": {
+    "module": "ovos-stt-plugin-onnx-asr",
+    "ovos-stt-plugin-onnx-asr": {
+      "model": "OpenVoiceOS/wav2vec2-base-10k-voxpopuli-ft-en-onnx"
+    }
+  }
+}
+```
+
+Ready-to-use conversions are published under the
+[OpenVoiceOS](https://huggingface.co/OpenVoiceOS/models?search=wav2vec2) org,
+including VoxPopuli base fine-tunes (cs, de, en, es, fi, fr, hr, hu, it, nl, pl, ro,
+sk, sl) and XLS-R fine-tunes for Swedish, Icelandic, Faroese, Finnish, Northern Sami
+and Serbian.
 
 ## Credits
 
