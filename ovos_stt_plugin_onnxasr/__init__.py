@@ -6,10 +6,14 @@ from ovos_plugin_manager.utils.audio import AudioData
 from ovos_utils import classproperty
 from ovos_utils.log import LOG
 
+from ovos_stt_plugin_onnxasr._compat import ensure_wav2vec2_ctc
+
 
 class OnnxASR(STT):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Teach onnx-asr about the wav2vec2-ctc type until upstream PR #1 ships it.
+        ensure_wav2vec2_ctc()
         model_id = self.config.get("model", "nemo-canary-1b-v2")
         quantization = self.config.get("quantization")
         providers = self._get_providers()
