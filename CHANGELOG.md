@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.2.0a1) (2026-07-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.1a2...0.2.0a1)
+
+**Merged pull requests:**
+
+- feat: load wav2vec2-ctc models via runtime onnx-asr shim [\#13](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/13) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.1.1a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.1.1a2) (2026-07-15)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.1a1...0.1.1a2)
