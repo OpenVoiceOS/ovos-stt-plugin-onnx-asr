@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.1.1a2) (2026-07-15)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.1a1...0.1.1a2)
+
+**Merged pull requests:**
+
+- docs: add funding attribution [\#14](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/14) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.1.1a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.1.1a1) (2026-07-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.0a2...0.1.1a1)
