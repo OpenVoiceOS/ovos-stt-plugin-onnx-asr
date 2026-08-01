@@ -8,13 +8,30 @@ from ovos_utils.log import LOG
 
 from ovos_stt_plugin_onnxasr._compat import ensure_wav2vec2_ctc
 
+# Best offline model per language when the config does not name one.
+# Citrinet exports verified against the original NeMo checkpoints
+# (https://huggingface.co/OpenVoiceOS).
+LANG_MODELS = {
+    "en": "OpenVoiceOS/stt_en_citrinet_1024_gamma_0_25_onnx",
+    "es": "OpenVoiceOS/stt_es_citrinet_1024_gamma_0_25_onnx",
+    "fr": "OpenVoiceOS/stt_fr_citrinet_1024_gamma_0_25_onnx",
+    "de": "OpenVoiceOS/stt_de_citrinet_1024_onnx",
+    "uk": "OpenVoiceOS/stt_uk_citrinet_1024_gamma_0_25_onnx",
+    "zh": "OpenVoiceOS/stt_zh_citrinet_1024_gamma_0_25_onnx",
+    "it": "OpenVoiceOS/stt_it_citrinet_512_gamma_0_25_onnx",
+    "ca": "OpenVoiceOS/stt_ca_citrinet_512_gamma_0_25_onnx",
+    "nl": "OpenVoiceOS/stt_nl_citrinet_512_gamma_0_25_onnx",
+    "pt": "OpenVoiceOS/stt_pt_citrinet_512_gamma_0_25_onnx",
+}
+
 
 class OnnxASR(STT):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Teach onnx-asr about the wav2vec2-ctc type until upstream PR #1 ships it.
         ensure_wav2vec2_ctc()
-        model_id = self.config.get("model", "nemo-canary-1b-v2")
+        lang = (self.lang or "").split("-")[0]
+        model_id = self.config.get("model") or LANG_MODELS.get(lang, "nemo-canary-1b-v2")
         quantization = self.config.get("quantization")
         providers = self._get_providers()
         if providers:
@@ -54,7 +71,7 @@ class OnnxASR(STT):
 
     @classproperty
     def available_languages(cls) -> set:
-        return set()
+        return set(LANG_MODELS)
 
     def execute(self, audio: AudioData, language: Optional[str] = None):
         """
