@@ -9,19 +9,31 @@ from ovos_utils.log import LOG
 from ovos_stt_plugin_onnxasr._compat import ensure_wav2vec2_ctc
 
 # Best offline model per language when the config does not name one.
-# Citrinet exports verified against the original NeMo checkpoints
-# (https://huggingface.co/OpenVoiceOS).
+# Heavier languages use NVIDIA FastConformer-hybrid large pc exports (CTC head,
+# punctuation + casing); the rest use light Citrinet-512 exports. All verified
+# against the original NeMo checkpoints (https://huggingface.co/OpenVoiceOS).
 LANG_MODELS = {
-    "en": "OpenVoiceOS/stt_en_citrinet_1024_gamma_0_25_onnx",
-    "es": "OpenVoiceOS/stt_es_citrinet_1024_gamma_0_25_onnx",
-    "fr": "OpenVoiceOS/stt_fr_citrinet_1024_gamma_0_25_onnx",
-    "de": "OpenVoiceOS/stt_de_citrinet_1024_onnx",
-    "uk": "OpenVoiceOS/stt_uk_citrinet_1024_gamma_0_25_onnx",
-    "zh": "OpenVoiceOS/stt_zh_citrinet_1024_gamma_0_25_onnx",
-    "it": "OpenVoiceOS/stt_it_citrinet_512_gamma_0_25_onnx",
+    "ar": "OpenVoiceOS/stt_ar_fastconformer_hybrid_large_pcd_v1.0_onnx",
+    "be": "OpenVoiceOS/stt_be_fastconformer_hybrid_large_pc_onnx",
     "ca": "OpenVoiceOS/stt_ca_citrinet_512_gamma_0_25_onnx",
+    "de": "OpenVoiceOS/stt_de_fastconformer_hybrid_large_pc_onnx",
+    "en": "OpenVoiceOS/stt_en_fastconformer_hybrid_large_pc_onnx",
+    "es": "OpenVoiceOS/stt_es_fastconformer_hybrid_large_pc_onnx",
+    "fa": "OpenVoiceOS/stt_fa_fastconformer_hybrid_large_onnx",
+    "fr": "OpenVoiceOS/stt_fr_fastconformer_hybrid_large_pc_onnx",
+    "hr": "OpenVoiceOS/stt_hr_fastconformer_hybrid_large_pc_onnx",
+    "hy": "OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx",
+    "it": "OpenVoiceOS/stt_it_citrinet_512_gamma_0_25_onnx",
+    "ka": "OpenVoiceOS/stt_ka_fastconformer_hybrid_large_pc_onnx",
+    "kk": "OpenVoiceOS/stt_kk_ru_fastconformer_hybrid_large_onnx",
+    "ko": "OpenVoiceOS/stt_kr_citrinet1024_PublicCallCenter_1000H_onnx",
     "nl": "OpenVoiceOS/stt_nl_citrinet_512_gamma_0_25_onnx",
+    "pl": "OpenVoiceOS/stt_pl_fastconformer_hybrid_large_pc_onnx",
     "pt": "OpenVoiceOS/stt_pt_citrinet_512_gamma_0_25_onnx",
+    "ru": "nemo-fastconformer-ru-ctc",
+    "uk": "OpenVoiceOS/stt_ua_fastconformer_hybrid_large_pc_onnx",
+    "uz": "OpenVoiceOS/stt_uz_fastconformer_hybrid_large_pc_onnx",
+    "zh": "OpenVoiceOS/stt_zh_citrinet_1024_gamma_0_25_onnx",
 }
 
 
