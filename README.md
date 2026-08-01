@@ -36,6 +36,7 @@ Configure the plugin in your `mycroft.conf` or user config.
 | Option | Default | Description |
 | --- | --- | --- |
 | `model` | `nemo-canary-1b-v2` | The model ID to load. Can be a specific alias (like `nemo-parakeet-tdt-0.6b-v3`) or a Hugging Face repo ID. |
+| `lang2model` | `{}` | Optional per-language routing map, e.g. `{"ru": "gigaam-v2-rnnt", "gl": "OpenVoiceOS/proxectonos-gl-conformer-ctc-large-onnx"}`. The model for a language loads lazily on the first request and stays cached in memory, so a single instance (or a single `ovos-stt-server` container) can serve every configured language with the best model for each. Unmapped languages fall back to `model`. |
 | `quantization` | `null` | Set to `"int8"` to load the quantized weights for faster, lower-memory CPU inference. Requires the repo to ship `*.int8.onnx` files; loading fails if they are absent. int8 trades a small accuracy drop (typically a few WER points, less on larger models) for ~3-4x smaller models. |
 | `use_cuda` | `false` | Run on the GPU via the CUDA execution provider (with a CPU fallback). |
 | `providers` | `null` | Explicit list of onnxruntime execution providers, e.g. `["CUDAExecutionProvider", "CPUExecutionProvider"]` or `["TensorrtExecutionProvider"]`. Takes precedence over `use_cuda`. |
