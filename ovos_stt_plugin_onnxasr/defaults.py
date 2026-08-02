@@ -29,7 +29,7 @@ for _l in ("bg hr cs da nl en et fi fr de el hu it lv lt mt pl pt ro sk sl "
 
 # whisper-base as long-tail coverage
 for _l in ("ar zh ja ko tr vi th id ms he fa sq sr mk bs is no nn cy af "
-           "sw ur bn").split():
+           "sw ur bn as").split():
     LANG_DEFAULTS[_l] = _WHISPER
 
 # dedicated fine-tunes — better than the multilingual fillers on their language
@@ -59,8 +59,10 @@ LANG_DEFAULTS.update({
     "tl": "OpenVoiceOS/stt-tl-fastconformer-hybrid-large-onnx",
 })
 
-# Indic: AI4Bharat IndicConformer per-language exports beat the Vaani multi model
-for _l in ("as bn brx doi gu hi kn kok ks mai ml mni mr ne or pa sa sat sd "
+# Indic: AI4Bharat IndicConformer per-language exports beat the Vaani multi model.
+# "as" (Assamese) is deliberately absent — its export repo holds no ONNX weights
+# yet, so Assamese stays on whisper until one is published.
+for _l in ("bn brx doi gu hi kn kok ks mai ml mni mr ne or pa sa sat sd "
            "ta te ur").split():
     LANG_DEFAULTS[_l] = f"OpenVoiceOS/ai4bharat-indicconformer-{_l}-onnx"
 

@@ -80,3 +80,25 @@ class TestPluginUsesRegistry(unittest.TestCase):
             stt = OnnxASR({"lang": "en", "model": "default-model"})
             stt.execute(audio, language="gl-ES")
         self.assertIn("OpenVoiceOS/proxectonos-gl-conformer-ctc-large-onnx", models)
+
+
+class TestRegistryIntegrity(unittest.TestCase):
+    """Guards against registry entries that cannot actually be loaded."""
+
+    def test_no_known_empty_repos(self):
+        # OpenVoiceOS/ai4bharat-indicconformer-as-onnx holds no ONNX weights;
+        # Assamese must not point at it until one is published.
+        self.assertNotIn("ai4bharat-indicconformer-as-onnx",
+                         LANG_DEFAULTS.get("as", ""))
+
+    def test_indic_langs_covered(self):
+        for lang in ("hi", "bn", "ta", "te", "kn", "ml", "mr", "gu", "pa", "or",
+                     "as", "ur"):
+            self.assertIn(lang, LANG_DEFAULTS)
+
+    def test_hf_repo_ids_well_formed(self):
+        for lang, model in LANG_DEFAULTS.items():
+            if "/" in model:
+                org, _, name = model.partition("/")
+                self.assertTrue(org and name, f"{lang}: {model}")
+                self.assertNotIn(" ", model, f"{lang}: {model}")
