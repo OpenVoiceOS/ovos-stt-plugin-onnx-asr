@@ -7,6 +7,7 @@ from ovos_plugin_manager.utils.audio import AudioData
 from ovos_utils.log import LOG
 
 from ovos_stt_plugin_onnxasr._compat import ensure_wav2vec2_ctc
+from ovos_stt_plugin_onnxasr.defaults import LANG_DEFAULTS, env_lang_defaults, resolve_model
 
 
 class OnnxASR(STT):
@@ -16,10 +17,14 @@ class OnnxASR(STT):
         ensure_wav2vec2_ctc()
         self.default_model_id = self.config.get("model", "nemo-canary-1b-v2")
         # Optional per-language routing: {"lang2model": {"ru": "gigaam-v2-rnnt", ...}}.
-        # Models load lazily on first request for their language and stay cached,
-        # so one server instance can serve every configured language.
+        # Keys are BCP-47 tags (full tags like "pt-br" or primary subtags like
+        # "pt"; full tags win). Anything not configured here falls back to
+        # ONNX_ASR_DEFAULT_<LANG> env vars, then the built-in best-model-per-
+        # language registry (defaults.LANG_DEFAULTS), then ``model``. Models
+        # load lazily on first request for their language and stay cached, so
+        # one server instance can serve every language.
         self.lang2model = {
-            k.split("-")[0].lower(): v
+            k.lower(): v
             for k, v in (self.config.get("lang2model") or {}).items()
         }
         self._models = {}
@@ -77,7 +82,8 @@ class OnnxASR(STT):
 
     @property
     def available_languages(self) -> set:
-        return set(self.lang2model)
+        langs = set(LANG_DEFAULTS) | set(env_lang_defaults()) | set(self.lang2model)
+        return langs
 
     def execute(self, audio: AudioData, language: Optional[str] = None):
         """
@@ -90,10 +96,11 @@ class OnnxASR(STT):
         Returns:
             transcription (str): Final recognized text for the processed audio.
         """
+        tag = (language or self.lang).lower()
+        model_id = resolve_model(tag, self.lang2model, self.default_model_id)
         # onnx-asr models use bare ISO 639-1 codes ("en"); OVOS hands us full
         # BCP-47 tags ("en-US"), which raise KeyError inside the decoders.
-        lang = (language or self.lang).split("-")[0].lower()
-        model_id = self.lang2model.get(lang, self.default_model_id)
+        lang = tag.split("-")[0]
         model, accepts_language, accepts_target_language = self.get_model(model_id)
         kwargs = {}
         if accepts_language:

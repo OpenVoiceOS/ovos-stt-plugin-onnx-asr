@@ -31,6 +31,17 @@ Configure the plugin in your `mycroft.conf` or user config.
 
 ```
 
+### Per-language model resolution
+
+The plugin ships a built-in best-model-per-language registry (`defaults.LANG_DEFAULTS`, ~90 languages — dedicated fine-tunes from the [OpenVoiceOS/stt-asr-onnx](https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx) collection, with parakeet-tdt-0.6b-v3 and whisper-base as multilingual coverage). Whisper ONNX exports are supported like any other model. The model for a request's language resolves in this order, trying the full BCP-47 tag before the primary subtag at each level:
+
+1. `lang2model` in the plugin config
+2. `ONNX_ASR_DEFAULT_<LANG>` environment variables — underscores map to dashes, so `ONNX_ASR_DEFAULT_PT=...` sets `pt` and `ONNX_ASR_DEFAULT_PT_BR=...` sets `pt-BR` (handy for containers)
+3. the built-in registry
+4. the configured `model`
+
+Models load lazily on the first request for their language and stay cached in memory, so a single instance (or one `ovos-stt-server` container) serves every language with the best available model.
+
 ### Configuration Options
 
 | Option | Default | Description |

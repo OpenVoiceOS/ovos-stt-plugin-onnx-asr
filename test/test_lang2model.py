@@ -23,7 +23,7 @@ CFG = {
     "model": "default-model",
     "lang2model": {
         "ru": "gigaam-v2-rnnt",
-        "PT-PT": "parakeet-pt",
+        "pt-PT": "parakeet-pt",
     },
 }
 
@@ -53,9 +53,9 @@ class TestLang2Model(unittest.TestCase):
         models["gigaam-v2-rnnt"].recognize.assert_called_once()
         models["default-model"].recognize.assert_not_called()
 
-    def test_lang2model_keys_normalized(self):
+    def test_lang2model_keys_lowercased_full_tags_kept(self):
         stt = self._stt(MagicMock(return_value=_adapter()))
-        self.assertEqual(stt.lang2model["pt"], "parakeet-pt")
+        self.assertEqual(stt.lang2model["pt-pt"], "parakeet-pt")
 
     def test_unmapped_lang_falls_back_to_default(self):
         models = {}
@@ -65,7 +65,7 @@ class TestLang2Model(unittest.TestCase):
         with patch("onnx_asr.load_model", load):
             from ovos_stt_plugin_onnxasr import OnnxASR
             stt = OnnxASR(dict(CFG))
-            stt.execute(_audio(), language="sw")
+            stt.execute(_audio(), language="tlh")
         self.assertEqual(list(models), ["default-model"])
         models["default-model"].recognize.assert_called_once()
 
@@ -76,10 +76,14 @@ class TestLang2Model(unittest.TestCase):
             stt = OnnxASR(dict(CFG))
             stt.execute(_audio(), language="ru")
             stt.execute(_audio(), language="ru")
-            stt.execute(_audio(), language="en")
-        # default (eager) + gigaam = 2 loads total, en reuses default
+            stt.execute(_audio(), language="tlh")
+        # default (eager) + gigaam = 2 loads total; tlh reuses the default
         self.assertEqual(load.call_count, 2)
 
     def test_available_languages(self):
         stt = self._stt(MagicMock(return_value=_adapter()))
-        self.assertEqual(stt.available_languages, {"ru", "pt"})
+        langs = stt.available_languages
+        # config keys plus the built-in registry
+        self.assertIn("ru", langs)
+        self.assertIn("pt-pt", langs)
+        self.assertIn("gl", langs)  # from LANG_DEFAULTS
