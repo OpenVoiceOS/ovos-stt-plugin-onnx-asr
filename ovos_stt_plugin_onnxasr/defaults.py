@@ -67,6 +67,12 @@ LANG_DEFAULTS.update({
     # than the whisper-base filler
     "ko": "OpenVoiceOS/stt_kr_citrinet1024_PublicCallCenter_1000H_onnx",
     "zh": "OpenVoiceOS/stt_zh_citrinet_1024_gamma_0_25_onnx",
+    # QuartzNet15x5: dated architecture, but the only dedicated exports for
+    # these languages (Carlos Daniel Hernandez Mena's Ravnursson/Samromur/MASRI
+    # trained checkpoints); beats the whisper-base filler
+    "fo": "OpenVoiceOS/carlosdanielhernandezmena-stt_fo_quartznet15x5_sp_ep163_100h_onnx",
+    "is": "OpenVoiceOS/carlosdanielhernandezmena-stt_is_quartznet15x5_ft_ep56_875h_onnx",
+    "mt": "OpenVoiceOS/carlosdanielhernandezmena-stt_mt_quartznet15x5_sp_ep255_64h_onnx",
 })
 
 # Indic: AI4Bharat IndicConformer per-language exports beat the Vaani multi model.
