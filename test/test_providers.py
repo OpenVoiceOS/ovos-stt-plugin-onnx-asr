@@ -8,9 +8,10 @@ import sys
 import unittest
 from unittest.mock import MagicMock
 
-# stub the heavy backend before importing the plugin
-_onnx_asr = MagicMock()
-sys.modules.setdefault("onnx_asr", _onnx_asr)
+# stub the heavy backend before importing the plugin; setdefault returns the
+# already-installed stub when another test module got there first, so we always
+# hold the same object the plugin module is bound to
+_onnx_asr = sys.modules.setdefault("onnx_asr", MagicMock())
 
 from ovos_stt_plugin_onnxasr import OnnxASR  # noqa: E402
 
