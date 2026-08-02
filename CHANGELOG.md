@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.2.1a1) (2026-08-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.2.0a1...0.2.1a1)
+
+**Merged pull requests:**
+
+- fix: normalize BCP-47 lang tags to primary subtag for onnx-asr [\#18](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/18) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.2.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.2.0a1) (2026-07-15)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.1.1a2...0.2.0a1)
