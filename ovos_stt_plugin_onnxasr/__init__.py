@@ -13,7 +13,8 @@ from ovos_stt_plugin_onnxasr.defaults import LANG_DEFAULTS, env_lang_defaults, r
 class OnnxASR(STT):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Teach onnx-asr about the wav2vec2-ctc type until upstream PR #1 ships it.
+        # wav2vec2-ctc is native in current onnx-asr (upstream PR #1); this
+        # shim backfills it on older releases and is a no-op otherwise.
         ensure_wav2vec2_ctc()
         self.default_model_id = self.config.get("model", "nemo-canary-1b-v2")
         # Optional per-language routing: {"lang2model": {"ru": "gigaam-v2-rnnt", ...}}.
