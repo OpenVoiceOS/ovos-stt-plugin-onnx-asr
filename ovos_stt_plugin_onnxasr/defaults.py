@@ -36,19 +36,18 @@ for _l in ("ar zh ja ko tr vi th id ms he fa sq sr mk bs is no nn cy af "
 LANG_DEFAULTS.update({
     "ru": "gigaam-v2-rnnt",
     "pt": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-pt-onnx",
-    "pl": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-pl-onnx",
     "nl": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-nl-onnx",
     "et": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-et-onnx",
     "sl": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-sl-onnx",
-    "es": "OpenVoiceOS/nvidia-es-conformer-transducer-large-onnx",
-    "de": "OpenVoiceOS/nvidia-de-conformer-transducer-large-onnx",
-    "fr": "OpenVoiceOS/nvidia-fr-conformer-transducer-large-onnx",
-    "it": "OpenVoiceOS/nvidia-it-conformer-transducer-large-onnx",
-    "hr": "OpenVoiceOS/nvidia-hr-conformer-transducer-large-onnx",
+    "es": "OpenVoiceOS/stt_es_fastconformer_hybrid_large_pc_onnx",
+    "de": "OpenVoiceOS/stt_de_fastconformer_hybrid_large_pc_onnx",
+    "fr": "OpenVoiceOS/stt_fr_fastconformer_hybrid_large_pc_onnx",
+    "it": "OpenVoiceOS/stt_it_fastconformer_hybrid_large_pc_onnx",
+    "hr": "OpenVoiceOS/stt_hr_fastconformer_hybrid_large_pc_onnx",
     "ca": "OpenVoiceOS/nvidia-ca-conformer-transducer-large-onnx",
     "eu": "OpenVoiceOS/hitz-eu-conformer-transducer-large-v2-onnx",
     "gl": "OpenVoiceOS/proxectonos-gl-conformer-ctc-large-onnx",
-    "be": "OpenVoiceOS/nvidia-be-conformer-transducer-large-onnx",
+    "be": "OpenVoiceOS/stt_be_fastconformer_hybrid_large_pc_onnx",
     "eo": "OpenVoiceOS/nvidia-eo-conformer-transducer-large-onnx",
     "rw": "OpenVoiceOS/nvidia-rw-conformer-transducer-large-onnx",
     "kab": "OpenVoiceOS/nvidia-kab-conformer-transducer-large-onnx",
@@ -57,6 +56,17 @@ LANG_DEFAULTS.update({
     "vi": "OpenVoiceOS/nvidia-parakeet-ctc-0.6b-vietnamese-onnx",
     "uz": "OpenVoiceOS/asr-uz-fastconformer-large-onnx",
     "tl": "OpenVoiceOS/stt-tl-fastconformer-hybrid-large-onnx",
+    "en": "nemo-parakeet-tdt-0.6b-v2",
+    "uk": "OpenVoiceOS/stt_ua_fastconformer_hybrid_large_pc_onnx",
+    "ar": "OpenVoiceOS/stt_ar_fastconformer_hybrid_large_pcd_v1.0_onnx",
+    "hy": "OpenVoiceOS/stt_hy_fastconformer_hybrid_large_pc_onnx",
+    "ka": "OpenVoiceOS/stt_ka_fastconformer_hybrid_large_pc_onnx",
+    "kk": "OpenVoiceOS/stt_kk_ru_fastconformer_hybrid_large_onnx",
+    "pl": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-pl-onnx",
+    # only dedicated exports for these languages are Citrinet; still better
+    # than the whisper-base filler
+    "ko": "OpenVoiceOS/stt_kr_citrinet1024_PublicCallCenter_1000H_onnx",
+    "zh": "OpenVoiceOS/stt_zh_citrinet_1024_gamma_0_25_onnx",
 })
 
 # Indic: AI4Bharat IndicConformer per-language exports beat the Vaani multi model.
