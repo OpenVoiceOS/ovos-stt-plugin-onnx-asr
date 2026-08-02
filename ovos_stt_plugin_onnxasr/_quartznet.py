@@ -44,9 +44,13 @@ def melscale_fbanks64(n_freqs: int = 257, sample_rate: int = 16_000) -> np.ndarr
 
 def ensure_quartznet_support() -> None:
     """Teach installed onnx-asr about nemo64 and length-free NeMo CTC graphs."""
-    from onnx_asr import loader
-    from onnx_asr.models import nemo as nemo_models
-    from onnx_asr.preprocessors.numpy_preprocessor import NemoPreprocessorNumpy
+    try:
+        from onnx_asr import loader
+        from onnx_asr.models import nemo as nemo_models
+        from onnx_asr.preprocessors.numpy_preprocessor import NemoPreprocessorNumpy
+    except ImportError:
+        # unexpected onnx-asr layout (or a test stub) — leave it untouched
+        return
 
     # 1. nemo64 preprocessor (NumPy implementation, fbanks computed here)
     if not getattr(loader.Manager._create_preprocessor, "_nemo64_patched", False):

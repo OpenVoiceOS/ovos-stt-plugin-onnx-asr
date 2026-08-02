@@ -1,25 +1,18 @@
 """Tests for execution-provider (CPU/GPU) selection in OnnxASR.
 
-``onnx_asr`` is stubbed so these run without the heavy onnxruntime dep; we
-only exercise the plugin's config -> providers wiring and what gets passed to
-``onnx_asr.load_model``.
+``onnx_asr.load_model`` is mocked; these only exercise the plugin's config ->
+providers wiring and what gets passed to ``onnx_asr.load_model``.
 """
-import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-# stub the heavy backend before importing the plugin; setdefault returns the
-# already-installed stub when another test module got there first, so we always
-# hold the same object the plugin module is bound to
-_onnx_asr = sys.modules.setdefault("onnx_asr", MagicMock())
-
-from ovos_stt_plugin_onnxasr import OnnxASR  # noqa: E402
+from ovos_stt_plugin_onnxasr import OnnxASR
 
 
 def _make(config):
-    _onnx_asr.load_model.reset_mock()
-    plugin = OnnxASR(config=config)
-    return plugin, _onnx_asr.load_model.call_args
+    with patch("onnx_asr.load_model", MagicMock()) as load_model:
+        plugin = OnnxASR(config=config)
+        return plugin, load_model.call_args
 
 
 class TestProviders(unittest.TestCase):
