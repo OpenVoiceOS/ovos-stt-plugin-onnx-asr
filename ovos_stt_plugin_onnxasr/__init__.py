@@ -7,11 +7,15 @@ from ovos_plugin_manager.utils.audio import AudioData
 from ovos_utils.log import LOG
 
 from ovos_stt_plugin_onnxasr.defaults import LANG_DEFAULTS, env_lang_defaults, resolve_model
+from ovos_stt_plugin_onnxasr._quartznet import ensure_quartznet_support
 
 
 class OnnxASR(STT):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Backfill nemo64 preprocessor + length-free NeMo CTC graphs on
+        # onnx-asr releases that predate QuartzNet/Jasper support.
+        ensure_quartznet_support()
         self.default_model_id = self.config.get("model", "nemo-canary-1b-v2")
         # Optional per-language routing: {"lang2model": {"ru": "gigaam-v2-rnnt", ...}}.
         # Keys are BCP-47 tags (full tags like "pt-br" or primary subtags like
