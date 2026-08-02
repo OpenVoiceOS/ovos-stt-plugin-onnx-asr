@@ -104,6 +104,23 @@ FastConformer** (`artpark-iisc-vaani-fastconformer-<lang>-onnx`) adds `hi` `kn`
 `hr` (Croatian), `be` (Belarusian), `eo` (Esperanto), `rw` (Kinyarwanda), and
 `nvidia-kab-conformer-transducer-large-onnx` (Kabyle).
 
+**NVIDIA FastConformer-Hybrid pc** (`stt_<lang>_fastconformer_hybrid_large_pc_onnx`,
+CTC head with punctuation + casing, fp32-only): `be` `de` `en` `es` `fr` `hr` `hy`
+(Armenian) `it` `ka` (Georgian) `nl` `pl` `pt` `ua` `uz`, plus
+`stt_ar_fastconformer_hybrid_large_{pc,pcd}_v1.0_onnx` (Arabic; `pcd` adds
+dialects), `stt_fa_fastconformer_hybrid_large_onnx` (Persian) and the bilingual
+`stt_kk_ru_fastconformer_hybrid_large_onnx` (Kazakh + Russian). These are the
+newest NVIDIA per-language checkpoints and the preferred default for their
+languages.
+
+**Citrinet** (fp32-only; older architecture — prefer the FastConformer or
+Conformer export when the language has one): NVIDIA
+`stt_{en,es,fr,de,uk,zh}_citrinet_{256,512,1024}[_gamma_0_25]_onnx`,
+NeonGecko `neongeckocom-stt_{en,es,de,fr,it,ca,nl,pt,uk}_citrinet_512_gamma_0_25_onnx`,
+Korean `stt_kr_citrinet1024_PublicCallCenter_1000H_onnx` (1000 h call-center) and
+Armenian `stt_hy-AM_citrinet_512_armenian-CV17.0_onnx`. Korean and Mandarin
+currently have no non-Citrinet export.
+
 **Parakeet (per-language)**
 
 | `model` | Language | Architecture |
