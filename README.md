@@ -254,9 +254,8 @@ For the full list of built-in aliases and benchmarks, see the [onnx-asr reposito
 
 `onnx-asr` supports the `wav2vec2-ctc` model type natively (merged upstream in
 [onnx-asr#1](https://github.com/istupakov/onnx-asr/pull/1)), so wav2vec2 / XLS-R
-CTC fine-tunes exported to ONNX load by repo id with no extra setup. On older
-`onnx-asr` releases that predate the merge, a small runtime shim bundled with the
-plugin fills the gap automatically. These are CTC models, so `language` is not
+CTC fine-tunes exported to ONNX load by repo id with no extra setup. Requires an
+`onnx-asr` release newer than 0.12.0. These are CTC models, so `language` is not
 used.
 
 ```json
