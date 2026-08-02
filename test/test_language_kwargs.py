@@ -63,3 +63,29 @@ class TestLanguageKwargs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLanguageNormalization(unittest.TestCase):
+    def _run(self, asr_class_name, lang):
+        captured = {}
+        with patch("onnx_asr.load_model", return_value=_fake_adapter(asr_class_name, captured)):
+            from ovos_stt_plugin_onnxasr import OnnxASR
+            stt = OnnxASR({"lang": "en", "model": "dummy"})
+            stt.execute(_audio(), language=lang)
+        return captured
+
+    def test_bcp47_tag_reduced_to_primary_subtag(self):
+        captured = self._run("WhisperOrt", "en-US")
+        self.assertEqual(captured["language"], "en")
+
+    def test_uppercase_tag_lowercased(self):
+        captured = self._run("WhisperOrt", "PT-PT")
+        self.assertEqual(captured["language"], "pt")
+
+    def test_config_lang_normalized_when_no_override(self):
+        captured = {}
+        with patch("onnx_asr.load_model", return_value=_fake_adapter("WhisperOrt", captured)):
+            from ovos_stt_plugin_onnxasr import OnnxASR
+            stt = OnnxASR({"lang": "gl-ES", "model": "dummy"})
+            stt.execute(_audio())
+        self.assertEqual(captured["language"], "gl")

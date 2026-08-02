@@ -67,7 +67,9 @@ class OnnxASR(STT):
         Returns:
             transcription (str): Final recognized text for the processed audio.
         """
-        lang = language or self.lang
+        # onnx-asr models use bare ISO 639-1 codes ("en"); OVOS hands us full
+        # BCP-47 tags ("en-US"), which raise KeyError inside the decoders.
+        lang = (language or self.lang).split("-")[0].lower()
         kwargs = {}
         if self._accepts_language:
             kwargs["language"] = lang
