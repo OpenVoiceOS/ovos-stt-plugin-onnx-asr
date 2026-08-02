@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.3.0a2) (2026-08-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.3.0a1...0.3.0a2)
+
+**Merged pull requests:**
+
+- docs: refresh supported-model catalog [\#12](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/12) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.3.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.3.0a1) (2026-08-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.2.1a1...0.3.0a1)
