@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.0a1) (2026-08-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.3.0a3...0.4.0a1)
+
+**Merged pull requests:**
+
+- feat: vendor onnx-asr model types so a plain pip install covers every architecture [\#26](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/26) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.3.0a3](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.3.0a3) (2026-08-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.3.0a2...0.3.0a3)
