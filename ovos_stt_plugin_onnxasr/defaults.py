@@ -1,18 +1,79 @@
 """Built-in best-model-per-language registry.
 
-Maps lowercase BCP-47 tags (full tag or primary subtag) to the best onnx-asr
+Maps BCP-47 tags to the best onnx-asr
 compatible model we know of for that language — dedicated fine-tunes first,
 multilingual models as coverage fillers. Most exports live in the
 `OpenVoiceOS/stt-asr-onnx` HuggingFace collection:
 https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx
 
-Resolution order (see ``OnnxASR``): plugin config ``lang2model`` >
-``ONNX_ASR_DEFAULT_<LANG>`` environment variables > this registry >
-the configured default ``model``. Full tags win over primary subtags at
-every level, so ``pt-br`` can point somewhere other than ``pt``.
+Resolution order (see ``OnnxASR``), from strongest to weakest:
+
+1. ``lang2model`` in the plugin config — the operator names a model for a language.
+2. ``ONNX_ASR_DEFAULT_<LANG>`` environment variables — the same choice, made at
+   deployment level instead of in the config file.
+3. ``model`` in the plugin config — the operator names one model for every
+   language. It is weaker than the two per-language layers and stronger than this
+   registry, because a registry entry is a guess and ``model`` is an instruction.
+4. this registry — the best model known for a language the operator said nothing
+   about.
+5. the built-in fallback model, for a language this registry does not hold.
+
+Full tags win over primary subtags at every level, so ``pt-br`` can point somewhere
+other than ``pt``. Tag comparison follows OVOS-INTENT-2 §2 via ``ovos-spec-tools``,
+so it is case insensitive, accepts underscores, and falls back to the nearest
+usable tag rather than to a shared prefix.
 """
 import os
 from typing import Dict, Optional
+
+from ovos_spec_tools.language import closest_lang, standardize_lang
+
+DEFAULT_MODEL = "nemo-canary-1b-v2"
+"""Model to serve a language that nothing else resolves."""
+
+KNOWN_BAD_MODELS: Dict[str, str] = {}
+"""Model id -> why the model must never be a default.
+
+A model that runs but returns text nobody can read is worse than no model: the
+request succeeds, so nothing reports a fault. An entry here is dropped from
+:data:`LANG_DEFAULTS`, which leaves the language to the operator's own
+configuration. Keep one line of evidence per entry.
+"""
+
+FP32_ONLY_MODELS = frozenset({
+    "OpenVoiceOS/asr-uz-fastconformer-large-onnx",
+    "OpenVoiceOS/stt_kr_citrinet1024_PublicCallCenter_1000H_onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-fante-onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-ga-onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-kasem-onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-lingala-onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-runyankore-onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-tsonga-onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-xhosa-onnx",
+    "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-zulu-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-fongbe-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-haitian-creole-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-malagasy-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-sesotho-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-setswana-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-shona-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-tigre-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-umbundu-onnx",
+    "OpenVoiceOS/misterkissi-whisper-small-vai-onnx",
+    "OpenVoiceOS/proxectonos-gl-conformer-ctc-large-onnx",
+    "OpenVoiceOS/stt-tl-fastconformer-hybrid-large-onnx",
+    "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-pl-onnx",
+    "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-pt-onnx",
+})
+"""Registry models whose repository holds fp32 weights only.
+
+``quantization: "int8"`` asks for files these repositories do not hold, and the
+load fails. The operator sets one quantization for the whole plugin, but this
+registry picks the model, so that setting must not take a language away.
+:func:`quantization_for` reads this set and loads fp32 for these models.
+
+The set holds registry models only, and a test keeps it equal to what the
+repositories really hold."""
 
 # multilingual coverage models
 _PARAKEET_V3 = "nemo-parakeet-tdt-0.6b-v3"  # 25 European languages
@@ -63,10 +124,21 @@ LANG_DEFAULTS.update({
     "ka": "OpenVoiceOS/stt_ka_fastconformer_hybrid_large_pc_onnx",
     "kk": "OpenVoiceOS/stt_kk_ru_fastconformer_hybrid_large_onnx",
     "pl": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-pl-onnx",
-    # only dedicated exports for these languages are Citrinet; still better
-    # than the whisper-base filler
+    # Paraformer is a dedicated Chinese model; SenseVoice covers Chinese,
+    # Cantonese, Japanese, Korean and English in one model. Both beat the
+    # Citrinet exports, which are the older architecture and hold fp32 weights
+    # only.
+    "zh": "OpenVoiceOS/paraformer-zh-onnx",
+    # langcodes reads an explicit Hant script as a large distance from plain
+    # "zh", which it resolves as Hans, so Traditional tags do not reach the
+    # entry above on nearest-tag matching alone. The model hears the same
+    # speech either way and writes Simplified, so name the tags instead of
+    # loosening the distance every language is matched with.
+    "zh-Hant": "OpenVoiceOS/paraformer-zh-onnx",
+    # SenseVoice covers Korean and is the stronger model, but its export
+    # currently rejects a third of all audio lengths, so Korean stays on the
+    # Citrinet export until that is resolved.
     "ko": "OpenVoiceOS/stt_kr_citrinet1024_PublicCallCenter_1000H_onnx",
-    "zh": "OpenVoiceOS/stt_zh_citrinet_1024_gamma_0_25_onnx",
 })
 
 # Indic: AI4Bharat IndicConformer per-language exports beat the Vaani multi model.
@@ -76,7 +148,12 @@ for _l in ("bn brx doi gu hi kn kok ks mai ml mni mr ne or pa sa sat sd "
            "ta te ur").split():
     LANG_DEFAULTS[_l] = f"OpenVoiceOS/ai4bharat-indicconformer-{_l}-onnx"
 
-# African & long-tail community fine-tunes (misterkissi exports)
+# African & long-tail community fine-tunes (misterkissi exports).
+# The w2v2 group below shares one source: XLS-R 300m fine-tunes by the same
+# author. They are accurate on speech that resembles their training data and
+# degrade sharply away from it: the Zulu member scores 12.5% WER on its own test
+# set and 91% on FLEURS. Treat the reported WER of any member as an in-domain
+# figure, and read a transcription of your own audio before relying on one.
 LANG_DEFAULTS.update({
     "ht": "OpenVoiceOS/misterkissi-whisper-small-haitian-creole-onnx",
     "mg": "OpenVoiceOS/misterkissi-whisper-small-malagasy-onnx",
@@ -87,7 +164,10 @@ LANG_DEFAULTS.update({
     "tig": "OpenVoiceOS/misterkissi-whisper-small-tigre-onnx",
     "fon": "OpenVoiceOS/misterkissi-whisper-small-fongbe-onnx",
     "vai": "OpenVoiceOS/misterkissi-whisper-small-vai-onnx",
-    "ga": "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-ga-onnx",
+    # "ga" in this model id is Ga, the Kwa language of Accra (ISO 639-3
+    # "gaa"), not Irish. The two-letter tag "ga" is Irish, and this model
+    # transcribes Irish at 99.7% WER while reaching 4.96% WER on Ga.
+    "gaa": "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-ga-onnx",
     "ln": "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-lingala-onnx",
     "zu": "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-zulu-onnx",
     "xh": "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-xhosa-onnx",
@@ -97,7 +177,33 @@ LANG_DEFAULTS.update({
     "xsm": "OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-kasem-onnx",
 })
 
+def drop_known_bad(table: Dict[str, str]) -> Dict[str, str]:
+    """
+    Return ``table`` without the languages that a known-bad model serves.
+
+    See :data:`KNOWN_BAD_MODELS`.
+    """
+    return {lang: model for lang, model in table.items()
+            if model not in KNOWN_BAD_MODELS}
+
+
+# Applied at the end, so that adding an id to KNOWN_BAD_MODELS is all it takes
+# to keep the model out of every language it serves.
+LANG_DEFAULTS = drop_known_bad(LANG_DEFAULTS)
+
 ENV_PREFIX = "ONNX_ASR_DEFAULT_"
+
+
+def quantization_for(model_id: str, quantization: Optional[str]) -> Optional[str]:
+    """
+    Give the quantization to load ``model_id`` with.
+
+    Returns ``quantization``, except for a registry model whose repository holds
+    fp32 weights only: that one loads fp32. See :data:`FP32_ONLY_MODELS`.
+    """
+    if quantization and model_id in FP32_ONLY_MODELS:
+        return None
+    return quantization
 
 
 def env_lang_defaults() -> Dict[str, str]:
@@ -111,27 +217,61 @@ def env_lang_defaults() -> Dict[str, str]:
     langs = {}
     for key, val in os.environ.items():
         if key.startswith(ENV_PREFIX) and val:
-            tag = key[len(ENV_PREFIX):].replace("_", "-").lower()
+            tag = key[len(ENV_PREFIX):]
             if tag:
-                langs[tag] = val
+                langs[standardize_lang(tag)] = val
     return langs
+
+
+def _match(tag: str, table: Dict[str, str]) -> Optional[str]:
+    """
+    Give the key of ``table`` that serves ``tag``, or None.
+
+    ``tag`` must already be standardized. Table keys are standardized here, so a
+    config written as ``{"pt_BR": ...}`` matches a request for ``pt-BR``.
+    """
+    keys = {standardize_lang(k): k for k in table}
+    if tag in keys:
+        return keys[tag]
+    nearest = closest_lang(tag, list(keys))
+    return keys[nearest] if nearest else None
 
 
 def resolve_model(lang: str,
                   lang2model: Dict[str, str],
-                  default_model: Optional[str] = None) -> Optional[str]:
+                  default_model: Optional[str] = None,
+                  configured_model: Optional[str] = None) -> Optional[str]:
     """
-    Pick the model for ``lang`` (a BCP-47 tag, any case).
+    Pick the model for ``lang`` (a BCP-47 tag, any case, hyphens or underscores).
 
-    Tries the full tag then the primary subtag at each level:
-    ``lang2model`` (plugin config) > env vars > built-in registry;
-    falls back to ``default_model``.
+    Matches the full tag then the nearest usable tag at each per-language level:
+    ``lang2model`` (plugin config) > ``ONNX_ASR_DEFAULT_<LANG>`` env vars >
+    ``configured_model`` > the built-in registry > ``default_model``.
+
+    Tag comparison follows OVOS-INTENT-2 §2: it is case insensitive, treats
+    underscores as hyphens, and falls back to the nearest tag within the
+    ``langcodes`` distance the spec calls usable. So ``en_US`` reaches an ``en``
+    entry, and a tag no entry is close to reaches ``default_model`` rather than
+    an unrelated language that happens to share a prefix.
+
+    Args:
+        lang: the language to serve.
+        lang2model: the ``lang2model`` map from the plugin config.
+        default_model: model for a language nothing else resolves.
+        configured_model: the ``model`` the operator wrote in the config, if any.
+            It names one model for every language, so it wins over the registry:
+            an operator who asks for a model gets that model. Leave it out to let
+            the registry pick per language.
     """
-    full = lang.lower()
-    primary = full.split("-")[0]
+    tag = standardize_lang(lang)
     env = env_lang_defaults()
-    for table in (lang2model, env, LANG_DEFAULTS):
-        for tag in (full, primary):
-            if tag in table:
-                return table[tag]
+    for table in (lang2model, env):
+        match = _match(tag, table)
+        if match:
+            return table[match]
+    if configured_model:
+        return configured_model
+    match = _match(tag, LANG_DEFAULTS)
+    if match:
+        return LANG_DEFAULTS[match]
     return default_model

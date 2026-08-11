@@ -51,9 +51,14 @@ class TestResolveModel(unittest.TestCase):
                                        "ONNX_ASR_DEFAULT_RU": "m2",
                                        "OTHER_VAR": "x"}):
             langs = env_lang_defaults()
-            self.assertEqual(langs.get("zh-hant"), "m1")
+            # Keys come back in canonical BCP-47 form, not as typed.
+            self.assertEqual(langs.get("zh-Hant"), "m1")
             self.assertEqual(langs.get("ru"), "m2")
             self.assertNotIn("other-var", langs)
+            # What the caller depends on is the lookup, which standardizes
+            # both sides, so the request may be written any way round.
+            self.assertEqual(resolve_model("zh_hant", {}, None), "m1")
+            self.assertEqual(resolve_model("RU", {}, None), "m2")
 
     def test_registry_sanity(self):
         # every entry is a non-empty string; key langs present
@@ -77,7 +82,9 @@ class TestPluginUsesRegistry(unittest.TestCase):
         audio.sample_rate = 16000
         with patch("onnx_asr.load_model", load):
             from ovos_stt_plugin_onnxasr import OnnxASR
-            stt = OnnxASR({"lang": "en", "model": "default-model"})
+            # no configured "model": a configured model serves every language
+            # itself, and the registry picks only for a plugin without one.
+            stt = OnnxASR({"lang": "en"})
             stt.execute(audio, language="gl-ES")
         self.assertIn("OpenVoiceOS/proxectonos-gl-conformer-ctc-large-onnx", models)
 

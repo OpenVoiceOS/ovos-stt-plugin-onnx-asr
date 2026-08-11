@@ -40,7 +40,8 @@ import sys
 import onnx_asr
 from ovos_config import Configuration
 
-from ovos_stt_plugin_onnxasr._compat import ensure_wav2vec2_ctc
+from ovos_stt_plugin_onnxasr._compat import ensure_model_types
+from ovos_stt_plugin_onnxasr.defaults import quantization_for
 
 PLUGIN_ID = "ovos-stt-plugin-onnx-asr"
 
@@ -51,12 +52,17 @@ quantization = config.get("quantization")
 requested = [m.strip() for m in sys.argv[1].split(",") if m.strip()]
 model_ids = requested or [config.get("model", "nemo-canary-1b-v2")]
 
-ensure_wav2vec2_ctc()
+ensure_model_types()
 
 for model_id in model_ids:
     print(f"prefetching onnx-asr model: {model_id}", flush=True)
     try:
-        onnx_asr.load_model(model_id, quantization=quantization)
+        # quantization_for, not the raw setting: a registry model whose
+        # repository holds fp32 weights only must be fetched as fp32, or the
+        # prefetch asks for a file that does not exist and the model the
+        # server will actually load stays uncached.
+        onnx_asr.load_model(model_id,
+                            quantization=quantization_for(model_id, quantization))
     except Exception as exc:
         # A model that cannot be fetched must not stop the server from
         # starting. The plugin falls back to the default model for a language
