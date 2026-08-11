@@ -1,15 +1,21 @@
-"""Runtime registration of the ``wav2vec2-ctc`` model type into onnx-asr.
+"""Registration of extra onnx-asr model types at runtime.
 
-onnx-asr only learns about ``wav2vec2-ctc`` once TigreGotico/onnx-asr PR #1 is merged
-and released. Until then, :func:`ensure_wav2vec2_ctc` teaches an *installed* onnx-asr
-about the vendored :class:`~ovos_stt_plugin_onnxasr._wav2vec2.Wav2Vec2Ctc` class so the
-OpenVoiceOS wav2vec2 ONNX models load through the normal
-``onnx_asr.load_model(<hf-repo-id>)`` path.
+Some ONNX model families in the plugin registry need a model type that the
+installed onnx-asr does not provide. This module carries the missing classes and
+registers them with onnx-asr when the plugin starts, so that
+``onnx_asr.load_model(<hf-repo-id>)`` loads those models through the normal path.
 
-The patch targets ``onnx_asr.loader.create_asr_resolver`` — the single chokepoint that
-builds the name→class ``model_types`` mapping and hands it to ``Resolver``. It is a
-no-op when onnx-asr already ships native support, and can be deleted together with
-``_wav2vec2`` once that release is the norm.
+Presently one type needs this: ``wav2vec2-ctc`` (wav2vec2 / XLS-R CTC fine-tunes).
+All other model types in the registry are native to onnx-asr.
+
+Each registration is idempotent, and does nothing when the installed onnx-asr
+provides the type. Thus the module becomes inert without a code change, and it can
+be deleted when every supported onnx-asr release has the type.
+
+The patch point is ``onnx_asr.loader.create_asr_resolver`` — the one function that
+builds the name-to-class ``model_types`` mapping and gives it to ``Resolver``. If
+that internal API changes, registration is skipped and the built-in model types
+keep working.
 """
 
 from ovos_utils.log import LOG
@@ -20,11 +26,11 @@ _SENTINEL = "_ovos_wav2vec2_patched"
 def ensure_wav2vec2_ctc() -> None:
     """Idempotently register ``wav2vec2-ctc`` with the installed onnx-asr.
 
-    Does nothing if onnx-asr already provides the type natively (PR #1 merged and
-    installed), if the patch is already applied, or if onnx-asr's internal resolver
-    API cannot be located (in which case built-in model types are left untouched).
+    Does nothing if the installed onnx-asr provides the type, if the patch is
+    already applied, or if the internal resolver API cannot be found. In the last
+    case the built-in model types stay untouched.
     """
-    # Native support present (upstream merged + installed) -> nothing to do.
+    # Installed onnx-asr provides the type -> nothing to do.
     try:
         import onnx_asr.models.wav2vec2  # noqa: F401
 
@@ -86,3 +92,12 @@ def ensure_wav2vec2_ctc() -> None:
     setattr(create_asr_resolver, _SENTINEL, True)
     loader.create_asr_resolver = create_asr_resolver
     LOG.debug("registered wav2vec2-ctc model type with onnx-asr")
+
+
+def ensure_model_types() -> None:
+    """Register every model type the plugin carries with the installed onnx-asr.
+
+    This is the entry point for the plugin. Call it once at start-up. It is safe to
+    call it more than once.
+    """
+    ensure_wav2vec2_ctc()

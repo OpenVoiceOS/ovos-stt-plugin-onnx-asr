@@ -1,12 +1,12 @@
-"""Wav2Vec2 CTC model implementation.
+"""Wav2Vec2 CTC model implementation for onnx-asr.
 
-Vendored verbatim from TigreGotico/onnx-asr PR #1 (branch ``feat/wav2vec2-ctc``),
-which adds a ``wav2vec2-ctc`` model type to onnx-asr but is not yet merged upstream.
-It relies only on stable onnx-asr internals (``_AsrWithCtcDecoding``, the ``identity``
-preprocessor, the CTC vocab loader) that have shipped since onnx-asr v0.9.0.
+This class adds the ``wav2vec2-ctc`` model type, which lets onnx-asr load
+HuggingFace wav2vec2 and XLS-R CTC fine-tunes exported to ONNX. It uses only stable
+onnx-asr internals: ``_AsrWithCtcDecoding``, the ``identity`` preprocessor and the
+CTC vocabulary loader.
 
-Once the PR lands upstream and users pick up an onnx-asr release that includes it,
-this module and ``_compat.ensure_wav2vec2_ctc`` become redundant and can be removed.
+``_compat.ensure_wav2vec2_ctc`` registers this class. Both become unnecessary when
+the installed onnx-asr provides the type.
 """
 
 from collections.abc import Callable

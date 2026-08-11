@@ -14,6 +14,10 @@ To install the plugin, use `pip`. You also need to ensure the backend dependenci
 pip install ovos-stt-plugin-onnx-asr
 ```
 
+To run this plugin as a standalone server in a container, see
+[docs/docker.md](docs/docker.md) and [docs/deployment.md](docs/deployment.md).
+For which model families load and how, see [docs/models.md](docs/models.md).
+
 ## Configuration
 
 Configure the plugin in your `mycroft.conf` or user config.
@@ -264,28 +268,8 @@ For the full list of built-in aliases and benchmarks, see the [onnx-asr reposito
 
 ### wav2vec2 models
 
-The plugin bundles a small runtime shim that teaches `onnx-asr` about the
-`wav2vec2-ctc` model type, so wav2vec2 / XLS-R CTC fine-tunes exported to ONNX load
-by repo id with no extra setup. (The shim is inert once
-[onnx-asr#1](https://github.com/istupakov/onnx-asr/pull/1) lands in an installed
-`onnx-asr` release.) These are CTC models, so `language` is not used.
-
-```json
-{
-  "stt": {
-    "module": "ovos-stt-plugin-onnx-asr",
-    "ovos-stt-plugin-onnx-asr": {
-      "model": "OpenVoiceOS/wav2vec2-base-10k-voxpopuli-ft-en-onnx"
-    }
-  }
-}
-```
-
-Ready-to-use conversions are published under the
-[OpenVoiceOS](https://huggingface.co/OpenVoiceOS/models?search=wav2vec2) org,
-including VoxPopuli base fine-tunes (cs, de, en, es, fi, fr, hr, hu, it, nl, pl, ro,
-sk, sl) and XLS-R fine-tunes for Swedish, Icelandic, Faroese, Finnish, Northern Sami
-and Serbian.
+wav2vec2 and XLS-R CTC fine-tunes load by repo id with no extra setup. See
+[docs/models.md](docs/models.md).
 
 ## Credits
 

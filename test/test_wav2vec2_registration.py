@@ -5,7 +5,7 @@ into ``sys.modules`` reproducing the internals the shim touches: an
 ``onnx_asr.loader`` whose ``create_asr_resolver`` rebuilds a local ``model_types``
 dict on every call and hands it to ``Resolver`` (exactly as the real one does), plus
 the ``asr``/``onnx``/``utils`` names the vendored class imports. Absence of an
-``onnx_asr.models.wav2vec2`` submodule mirrors an onnx-asr release *without* PR #1.
+``onnx_asr.models.wav2vec2`` submodule mirrors an onnx-asr release without the type.
 """
 import sys
 import types
@@ -82,6 +82,20 @@ class TestWav2Vec2Registration(unittest.TestCase):
         for name in ("ovos_stt_plugin_onnxasr._compat",
                      "ovos_stt_plugin_onnxasr._wav2vec2"):
             sys.modules.pop(name, None)
+        # The fake package replaces onnx_asr in sys.modules and has no
+        # load_model. Restore whatever was there so tests that run afterwards
+        # still see a module they can patch; test order is not fixed, so
+        # leaking the fake makes unrelated tests fail on some runs only.
+        saved = {name: mod for name, mod in sys.modules.items()
+                 if name == "onnx_asr" or name.startswith("onnx_asr.")}
+        self.addCleanup(self._restore_onnx_asr, saved)
+
+    @staticmethod
+    def _restore_onnx_asr(saved):
+        for name in [n for n in sys.modules
+                     if n == "onnx_asr" or n.startswith("onnx_asr.")]:
+            del sys.modules[name]
+        sys.modules.update(saved)
 
     def test_registers_wav2vec2_type(self):
         loader = _install_fake_onnx_asr()
@@ -113,6 +127,20 @@ class TestWav2Vec2Registration(unittest.TestCase):
         patched = loader.create_asr_resolver
         ensure_wav2vec2_ctc()
         self.assertIs(loader.create_asr_resolver, patched)
+
+    def test_entry_point_registers_wav2vec2(self):
+        """``ensure_model_types`` is the single call site used by the plugin."""
+        loader = _install_fake_onnx_asr()
+        from ovos_stt_plugin_onnxasr._compat import ensure_model_types
+        from ovos_stt_plugin_onnxasr._wav2vec2 import Wav2Vec2Ctc
+
+        with self.assertRaises(KeyError):
+            loader.create_asr_resolver("wav2vec2-ctc")
+
+        ensure_model_types()
+
+        resolver = loader.create_asr_resolver("wav2vec2-ctc")
+        self.assertIs(resolver.model_type, Wav2Vec2Ctc)
 
     def test_native_support_is_noop(self):
         loader = _install_fake_onnx_asr(with_native=True)
