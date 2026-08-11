@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0a3](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.3.0a3) (2026-08-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.3.0a2...0.3.0a3)
+
+**Merged pull requests:**
+
+- Add container deployment \(Dockerfile, compose, CI, docs\) and bound the model cache [\#25](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/25) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.3.0a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.3.0a2) (2026-08-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.3.0a1...0.3.0a2)
