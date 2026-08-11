@@ -1,0 +1,37 @@
+services:
+  onnx-asr-stt:
+    image: ghcr.io/openvoiceos/ovos-stt-plugin-onnx-asr:latest
+    # ...or build from this checkout instead of pulling the published image:
+    # build: .
+    container_name: onnx-asr-stt
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Comma-separated onnx-asr model ids to warm before the server takes
+      # traffic. Defaults to the plugin's default model when unset.
+      - ONNX_ASR_PREFETCH_MODELS=nemo-canary-1b-v2
+    volumes:
+      # downloaded models persist here (a named volume so the cache survives
+      # container recreation)
+      - onnx-asr-cache:/home/ovos/.cache
+      # optional: mount a mycroft.conf to pick the model / language routing,
+      # e.g. {"stt": {"ovos-stt-plugin-onnx-asr": {"model": "...", "max_loaded_models": 2}}}
+      # - ./mycroft.conf:/home/ovos/.config/mycroft/mycroft.conf:ro
+    # Each onnx-asr model is multi-GB; bound the container so a runaway
+    # model cache (see max_loaded_models in mycroft.conf) cannot take down
+    # the host. Raise this if you configure more than one or two resident
+    # models.
+    mem_limit: 6g
+    healthcheck:
+      # /status only reports plugin metadata -- never point this at a
+      # transcription endpoint, which can block for minutes on a cold
+      # model download and falsely report the container as unhealthy.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/status')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  onnx-asr-cache:
