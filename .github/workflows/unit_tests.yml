@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install . pytest pytest-randomly
+          pip install . pytest pytest-randomly onnxruntime
       - name: Run unit tests
         # The suite stubs onnx_asr in sys.modules; randomized order is kept on
         # purpose so a test that fails to restore what it replaced is caught
