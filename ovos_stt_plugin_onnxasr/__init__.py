@@ -4,12 +4,15 @@ from typing import List, Optional
 
 import onnx_asr
 from ovos_plugin_manager.templates.stt import STT
+from ovos_spec_tools.language import standardize_lang
 from ovos_plugin_manager.utils.audio import AudioData
 
 from ovos_utils.log import LOG
 
 from ovos_stt_plugin_onnxasr._compat import ensure_model_types
-from ovos_stt_plugin_onnxasr.defaults import LANG_DEFAULTS, env_lang_defaults, resolve_model
+from ovos_stt_plugin_onnxasr.defaults import (DEFAULT_MODEL, LANG_DEFAULTS,
+                                              env_lang_defaults,
+                                              quantization_for, resolve_model)
 
 
 class OnnxASR(STT):
@@ -17,18 +20,21 @@ class OnnxASR(STT):
         super().__init__(*args, **kwargs)
         # Register the model types the plugin carries with onnx-asr.
         ensure_model_types()
-        self.default_model_id = self.config.get("model", "nemo-canary-1b-v2")
+        # ``model`` names one model for every language. It is the operator's
+        # own choice, so it wins over the built-in registry: a configured model
+        # is what the plugin serves. The registry picks per language for an
+        # operator who names no model.
+        self.configured_model_id = self.config.get("model") or None
+        self.default_model_id = self.configured_model_id or DEFAULT_MODEL
         # Optional per-language routing: {"lang2model": {"ru": "gigaam-v2-rnnt", ...}}.
         # Keys are BCP-47 tags (full tags like "pt-br" or primary subtags like
-        # "pt"; full tags win). Anything not configured here falls back to
-        # ONNX_ASR_DEFAULT_<LANG> env vars, then the built-in best-model-per-
-        # language registry (defaults.LANG_DEFAULTS), then ``model``. Models
-        # load lazily on first request for their language and stay cached, so
-        # one server instance can serve every language.
-        self.lang2model = {
-            k.lower(): v
-            for k, v in (self.config.get("lang2model") or {}).items()
-        }
+        # "pt"; full tags win). A language named here, or by an
+        # ONNX_ASR_DEFAULT_<LANG> env var, beats ``model`` as well: it is the
+        # more specific instruction. A language nobody named falls to the
+        # built-in best-model-per-language registry (defaults.LANG_DEFAULTS).
+        # Models load lazily on first request for their language and stay
+        # cached, so one server instance can serve every language.
+        self.lang2model = dict(self.config.get("lang2model") or {})
         self._models = OrderedDict()
         # Model ids that failed to load. Kept so a broken or unreachable model
         # is not retried on every request for its language.
@@ -94,7 +100,12 @@ class OnnxASR(STT):
             # which is the OOM this cap exists to prevent.
             self._evict_lru(headroom=1)
 
-        quantization = self.config.get("quantization")
+        # A model this plugin picked from the registry must not be lost because
+        # its repository holds no quantized weights.
+        requested = self.config.get("quantization")
+        quantization = quantization_for(model_id, requested)
+        if quantization != requested:
+            LOG.info(f"'{model_id}' has no {requested} weights; loading fp32")
         providers = self._get_providers()
         if providers:
             LOG.info(f"onnx-asr using providers: {providers}")
@@ -190,8 +201,10 @@ class OnnxASR(STT):
 
     @property
     def available_languages(self) -> set:
-        langs = set(LANG_DEFAULTS) | set(env_lang_defaults()) | set(self.lang2model)
-        return langs
+        # Canonical BCP-47, so a caller comparing against this set is not
+        # comparing against however the operator happened to spell a key.
+        return {standardize_lang(t) for t in
+                set(LANG_DEFAULTS) | set(env_lang_defaults()) | set(self.lang2model)}
 
     def execute(self, audio: AudioData, language: Optional[str] = None):
         """
@@ -204,10 +217,13 @@ class OnnxASR(STT):
         Returns:
             transcription (str): Final recognized text for the processed audio.
         """
-        tag = (language or self.lang).lower()
-        model_id = resolve_model(tag, self.lang2model, self.default_model_id)
+        tag = standardize_lang(language or self.lang)
+        model_id = resolve_model(tag, self.lang2model, self.default_model_id,
+                                 configured_model=self.configured_model_id)
         # onnx-asr models use bare ISO 639-1 codes ("en"); OVOS hands us full
-        # BCP-47 tags ("en-US"), which raise KeyError inside the decoders.
+        # BCP-47 tags ("en-US"), which raise KeyError inside the decoders. The
+        # tag is standardized above, so the subtag is separated by a hyphen
+        # whatever the caller wrote.
         lang = tag.split("-")[0]
         model, accepts_language, accepts_target_language = self._load_with_fallback(model_id, tag)
         kwargs = {}

@@ -23,6 +23,11 @@ engine id:
 }
 ```
 
+`model` serves every language that `lang2model` and the
+`ONNX_ASR_DEFAULT_<LANG>` environment variables do not name. Leave `model` out
+to let the built-in registry pick the best known model per language instead;
+see the resolution order in the [README](../README.md).
+
 Mount it read-only into the container:
 
 ```yaml

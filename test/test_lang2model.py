@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch, call
 
+from ovos_stt_plugin_onnxasr.defaults import resolve_model
 import numpy as np
 
 
@@ -53,9 +54,15 @@ class TestLang2Model(unittest.TestCase):
         models["gigaam-v2-rnnt"].recognize.assert_called_once()
         models["default-model"].recognize.assert_not_called()
 
-    def test_lang2model_keys_lowercased_full_tags_kept(self):
+    def test_lang2model_full_tag_resolves_however_it_is_written(self):
+        # The map is kept as the operator wrote it; matching standardizes both
+        # sides, so the spelling of a key never decides whether it applies.
         stt = self._stt(MagicMock(return_value=_adapter()))
-        self.assertEqual(stt.lang2model["pt-pt"], "parakeet-pt")
+        for tag in ("pt-PT", "pt_PT", "PT-pt"):
+            with self.subTest(tag=tag):
+                self.assertEqual(
+                    resolve_model(tag, stt.lang2model, "default-model"),
+                    "parakeet-pt")
 
     def test_unmapped_lang_falls_back_to_default(self):
         models = {}
@@ -85,5 +92,5 @@ class TestLang2Model(unittest.TestCase):
         langs = stt.available_languages
         # config keys plus the built-in registry
         self.assertIn("ru", langs)
-        self.assertIn("pt-pt", langs)
+        self.assertIn("pt-PT", langs)  # canonical BCP-47, not as written
         self.assertIn("gl", langs)  # from LANG_DEFAULTS
