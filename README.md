@@ -37,22 +37,29 @@ Configure the plugin in your `mycroft.conf` or user config.
 
 ### Per-language model resolution
 
-The plugin ships a built-in best-model-per-language registry (`defaults.LANG_DEFAULTS`, ~90 languages — dedicated fine-tunes from the [OpenVoiceOS/stt-asr-onnx](https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx) collection, with parakeet-tdt-0.6b-v3 and whisper-base as multilingual coverage). Whisper ONNX exports are supported like any other model. The model for a request's language resolves in this order, trying the full BCP-47 tag before the primary subtag at each level:
+The plugin ships a built-in best-model-per-language registry (`defaults.LANG_DEFAULTS`, ~90 languages — dedicated fine-tunes from the [OpenVoiceOS/stt-asr-onnx](https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx) collection, with parakeet-tdt-0.6b-v3 and whisper-base as multilingual coverage). Whisper ONNX exports are supported like any other model. The model for a request's language resolves in this order, trying the full BCP-47 tag before the nearest usable tag at each level:
 
 1. `lang2model` in the plugin config
 2. `ONNX_ASR_DEFAULT_<LANG>` environment variables — underscores map to dashes, so `ONNX_ASR_DEFAULT_PT=...` sets `pt` and `ONNX_ASR_DEFAULT_PT_BR=...` sets `pt-BR` (handy for containers)
-3. the built-in registry
-4. the configured `model`
+3. the configured `model`
+4. the built-in registry
+5. `nemo-canary-1b-v2`, for a language the registry does not hold
+
+Language tags are compared as OVOS-INTENT-2 §2 specifies, via [`ovos-spec-tools`](https://github.com/OpenVoiceOS/ovos-spec-tools): case insensitively, with underscores accepted for hyphens, falling back to the nearest usable tag. So `en_US`, `en-GB` and `EN` all reach the `en` entry, while `ga` (Irish) never reaches the `gaa` (Ga) one.
+
+A configured `model` serves every language, because it is your instruction and a registry entry is only the best guess for a language you said nothing about. To let the registry pick per language, leave `model` unset and name exceptions in `lang2model`.
 
 Models load lazily on the first request for their language and stay cached in memory, so a single instance (or one `ovos-stt-server` container) serves every language with the best available model.
+
+A registry model whose repository holds no quantized weights loads fp32, even with `quantization` set, so that setting cannot take a language away.
 
 ### Configuration Options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `model` | `nemo-canary-1b-v2` | The model ID to load. Can be a specific alias (like `nemo-parakeet-tdt-0.6b-v3`) or a Hugging Face repo ID. |
+| `model` | `nemo-canary-1b-v2` | The model ID to load. Can be a specific alias (like `nemo-parakeet-tdt-0.6b-v3`) or a Hugging Face repo ID. Set it and it serves every language, ahead of the built-in registry; leave it unset for per-language routing. |
 | `lang2model` | `{}` | Optional per-language routing map, e.g. `{"ru": "gigaam-v2-rnnt", "gl": "OpenVoiceOS/proxectonos-gl-conformer-ctc-large-onnx"}`. The model for a language loads lazily on the first request and stays cached in memory, so a single instance (or a single `ovos-stt-server` container) can serve every configured language with the best model for each. Unmapped languages fall back to `model`. |
-| `quantization` | `null` | Set to `"int8"` to load the quantized weights for faster, lower-memory CPU inference. Requires the repo to ship `*.int8.onnx` files; loading fails if they are absent. int8 trades a small accuracy drop (typically a few WER points, less on larger models) for ~3-4x smaller models. |
+| `quantization` | `null` | Set to `"int8"` to load the quantized weights for faster, lower-memory CPU inference. Requires the repo to ship `*.int8.onnx` files; loading fails if they are absent, except for a model the built-in registry picked, which then loads fp32. int8 trades a small accuracy drop (typically a few WER points, less on larger models) for ~3-4x smaller models. |
 | `use_cuda` | `false` | Run on the GPU via the CUDA execution provider (with a CPU fallback). |
 | `providers` | `null` | Explicit list of onnxruntime execution providers, e.g. `["CUDAExecutionProvider", "CPUExecutionProvider"]` or `["TensorrtExecutionProvider"]`. Takes precedence over `use_cuda`. |
 
@@ -179,7 +186,7 @@ Every model in the collection, grouped by language:
 | Hindi | `OpenVoiceOS/artpark-iisc-vaani-fastconformer-hi-onnx` | FastConformer |
 | Ikposo | `OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-kposo-onnx` | wav2vec2 CTC |
 | Ikposo | `OpenVoiceOS/misterkissi-whisper-small-kposo-onnx` | Whisper |
-| Irish | `OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-ga-onnx` | wav2vec2 CTC |
+| Ga | `OpenVoiceOS/misterkissi-w2v2-lg-xls-r-300m-ga-onnx` | wav2vec2 CTC — Ga, the Kwa language of Accra (`gaa`), not Irish |
 | Italian | `OpenVoiceOS/neongeckocom-stt_it_citrinet_512_gamma_0_25_onnx` | Citrinet CTC |
 | Italian | `OpenVoiceOS/nvidia-it-conformer-ctc-large-onnx` | Conformer CTC |
 | Italian | `OpenVoiceOS/nvidia-it-conformer-transducer-large-onnx` | Conformer RNN-T |

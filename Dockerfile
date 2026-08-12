@@ -10,7 +10,13 @@ RUN useradd -m -u 1000 ovos
 WORKDIR /app
 COPY . /app
 
-RUN pip install --no-cache-dir . ovos-stt-http-server
+# The onnxruntime extra is named here rather than in requirements.txt, so that
+# a GPU deployment can install onnxruntime-gpu against the same plugin. The
+# server floor is explicit and is a prerelease: the last stable server pins
+# ovos-plugin-manager<1.0.0, which this plugin cannot satisfy, so an unpinned
+# name silently backtracks to a stub release that carries no dependencies at
+# all and produces an image that builds and then cannot start.
+RUN pip install --no-cache-dir . "onnx-asr[cpu,hub]" "ovos-stt-http-server>=0.25.1a3"
 
 # Create the cache parents OWNED BY ovos before any bind mount lands on them.
 # Docker creates missing mount parents as root, so if .cache is absent from
