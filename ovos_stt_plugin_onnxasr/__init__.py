@@ -85,7 +85,9 @@ class OnnxASR(STT):
         Load (or fetch from cache) the onnx-asr model for ``model_id``.
 
         Returns:
-            tuple: (model, accepts_language, accepts_target_language)
+            tuple: (model, accepts_language, accepts_target_language,
+                languages) where ``languages`` names the language hints a
+                Whisper vocabulary can select, or None for other families.
 
         The server answers requests from a threadpool, so the cache is guarded
         by a lock and the loaded entry is returned directly. Reading it back
@@ -120,7 +122,18 @@ class OnnxASR(STT):
         asr_name = type(model.asr).__name__
         accepts_language = "Whisper" in asr_name or asr_name == "NemoConformerAED"
         accepts_target_language = asr_name == "NemoConformerAED"
-        entry = (model, accepts_language, accepts_target_language)
+        # A Whisper decoder selects the language through a "<|xx|>" token in
+        # its vocabulary, so a fine-tune into a language Whisper never carried
+        # has no token to select. onnx-asr looks the token up unguarded, which
+        # raises KeyError on the Setswana, Sesotho, Fongbe, Tigre, Umbundu
+        # and Vai exports and answers the request with a 500. Those exports
+        # are monolingual, so the languages the vocabulary does list are
+        # collected here and the hint is dropped for anything else.
+        languages = None
+        if "Whisper" in asr_name:
+            languages = {token[2:-2] for token in model.asr._tokens
+                         if token.startswith("<|") and token.endswith("|>")}
+        entry = (model, accepts_language, accepts_target_language, languages)
 
         with self._lock:
             self._models[model_id] = entry
@@ -225,10 +238,16 @@ class OnnxASR(STT):
         # tag is standardized above, so the subtag is separated by a hyphen
         # whatever the caller wrote.
         lang = tag.split("-")[0]
-        model, accepts_language, accepts_target_language = self._load_with_fallback(model_id, tag)
+        model, accepts_language, accepts_target_language, languages = \
+            self._load_with_fallback(model_id, tag)
         kwargs = {}
-        if accepts_language:
+        if accepts_language and (languages is None or lang in languages):
             kwargs["language"] = lang
+        elif accepts_language:
+            # Without the hint onnx-asr runs Whisper's language detection
+            # pass, and a monolingual fine-tune answers in the one language
+            # it was trained on.
+            LOG.debug(f"'{model_id}' has no '{lang}' token; detecting instead")
         if accepts_target_language:
             kwargs["target_language"] = lang
         text = model.recognize(
