@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.2a1) (2026-08-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.1a1...0.4.2a1)
+
+**Merged pull requests:**
+
+- fix: drop the Whisper language hint when the vocabulary lacks the token [\#30](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/30) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.4.1a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.1a1) (2026-08-12)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.0a1...0.4.1a1)
