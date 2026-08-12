@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.1a1) (2026-08-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.0a1...0.4.1a1)
+
+**Merged pull requests:**
+
+- fix: serve the configured model and drop registry entries that cannot serve [\#29](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/29) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.4.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.0a1) (2026-08-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.3.0a3...0.4.0a1)
