@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.2a2) (2026-08-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.2a1...0.4.2a2)
+
+**Merged pull requests:**
+
+- build: expose the MCP endpoint from the published image [\#32](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/32) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.4.2a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.2a1) (2026-08-12)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.1a1...0.4.2a1)
