@@ -10,8 +10,9 @@ from ovos_plugin_manager.utils.audio import AudioData
 from ovos_utils.log import LOG
 
 from ovos_stt_plugin_onnxasr._compat import ensure_model_types
-from ovos_stt_plugin_onnxasr.defaults import (DEFAULT_MODEL, LANG_DEFAULTS,
-                                              env_lang_defaults,
+from ovos_stt_plugin_onnxasr.defaults import (DEFAULT_CPU_MODEL, DEFAULT_MODEL,
+                                              LANG_DEFAULTS, cpu_friendly_only,
+                                              env_lang_defaults, is_cpu_friendly,
                                               quantization_for, resolve_model)
 
 
@@ -20,12 +21,24 @@ class OnnxASR(STT):
         super().__init__(*args, **kwargs)
         # Register the model types the plugin carries with onnx-asr.
         ensure_model_types()
+        # Restricts model selection to models a CPU-only deployment can
+        # actually run. Off by default, so an unset config keeps today's
+        # behaviour: every model in the catalogue stays selectable.
+        self.cpu_models_only = self._parse_cpu_models_only(
+            self.config.get("cpu_models_only"))
         # ``model`` names one model for every language. It is the operator's
         # own choice, so it wins over the built-in registry: a configured model
         # is what the plugin serves. The registry picks per language for an
         # operator who names no model.
         self.configured_model_id = self.config.get("model") or None
-        self.default_model_id = self.configured_model_id or DEFAULT_MODEL
+        if self.cpu_models_only and self.configured_model_id \
+                and not is_cpu_friendly(self.configured_model_id):
+            raise ValueError(
+                f"'model' is set to '{self.configured_model_id}', which "
+                f"'cpu_models_only' excludes as unsuitable for CPU-only "
+                f"inference; pick a smaller model or unset 'cpu_models_only'")
+        self.default_model_id = self.configured_model_id or (
+            DEFAULT_CPU_MODEL if self.cpu_models_only else DEFAULT_MODEL)
         # Optional per-language routing: {"lang2model": {"ru": "gigaam-v2-rnnt", ...}}.
         # Keys are BCP-47 tags (full tags like "pt-br" or primary subtags like
         # "pt"; full tags win). A language named here, or by an
@@ -35,6 +48,20 @@ class OnnxASR(STT):
         # Models load lazily on first request for their language and stay
         # cached, so one server instance can serve every language.
         self.lang2model = dict(self.config.get("lang2model") or {})
+        if self.cpu_models_only:
+            for lang, model_id in self.lang2model.items():
+                if not is_cpu_friendly(model_id):
+                    raise ValueError(
+                        f"lang2model['{lang}'] is set to '{model_id}', which "
+                        f"'cpu_models_only' excludes as unsuitable for "
+                        f"CPU-only inference; pick a smaller model or unset "
+                        f"'cpu_models_only'")
+        # The per-language registry a request actually resolves against.
+        # Filtered to models a CPU-only deployment can run, when the flag
+        # asks for that; unfiltered otherwise, so the default list is exactly
+        # `defaults.LANG_DEFAULTS`.
+        self._lang_registry = (cpu_friendly_only(LANG_DEFAULTS)
+                               if self.cpu_models_only else LANG_DEFAULTS)
         self._models = OrderedDict()
         # Model ids that failed to load. Kept so a broken or unreachable model
         # is not retried on every request for its language.
@@ -79,6 +106,30 @@ class OnnxASR(STT):
                       f"least 1; the cache is unbounded")
             return None
         return parsed
+
+    @staticmethod
+    def _parse_cpu_models_only(value) -> bool:
+        """
+        Normalize the ``cpu_models_only`` config value to a bool.
+
+        Configuration reaches plugins from hand-edited files and from
+        environment injection, so a value can arrive as a string, or as
+        garbage. A value this cannot read as a bool is reported and treated
+        as unset (off), because refusing to start would take down a server
+        over a tuning knob.
+        """
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, str):
+            low = value.strip().lower()
+            if low in ("1", "true", "yes", "on"):
+                return True
+            if low in ("0", "false", "no", "off", ""):
+                return False
+        LOG.error(f"ignoring invalid cpu_models_only: {value!r}")
+        return False
 
     def get_model(self, model_id: str):
         """
@@ -217,7 +268,7 @@ class OnnxASR(STT):
         # Canonical BCP-47, so a caller comparing against this set is not
         # comparing against however the operator happened to spell a key.
         return {standardize_lang(t) for t in
-                set(LANG_DEFAULTS) | set(env_lang_defaults()) | set(self.lang2model)}
+                set(self._lang_registry) | set(env_lang_defaults()) | set(self.lang2model)}
 
     def execute(self, audio: AudioData, language: Optional[str] = None):
         """
@@ -232,7 +283,8 @@ class OnnxASR(STT):
         """
         tag = standardize_lang(language or self.lang)
         model_id = resolve_model(tag, self.lang2model, self.default_model_id,
-                                 configured_model=self.configured_model_id)
+                                 configured_model=self.configured_model_id,
+                                 registry=self._lang_registry)
         # onnx-asr models use bare ISO 639-1 codes ("en"); OVOS hands us full
         # BCP-47 tags ("en-US"), which raise KeyError inside the decoders. The
         # tag is standardized above, so the subtag is separated by a hyphen

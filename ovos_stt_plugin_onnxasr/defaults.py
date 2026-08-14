@@ -24,12 +24,61 @@ so it is case insensitive, accepts underscores, and falls back to the nearest
 usable tag rather than to a shared prefix.
 """
 import os
+import re
 from typing import Dict, Optional
 
 from ovos_spec_tools.language import closest_lang, standardize_lang
 
 DEFAULT_MODEL = "nemo-canary-1b-v2"
 """Model to serve a language that nothing else resolves."""
+
+DEFAULT_CPU_MODEL = "whisper-base"
+"""Model to serve a language that nothing else resolves, under ``cpu_models_only``.
+
+:data:`DEFAULT_MODEL` names its own parameter count (1B) in its id, which
+:func:`is_cpu_friendly` reads as too large for a CPU-only deployment. This one
+is the plugin's other multilingual coverage filler (99 languages, 74M
+parameters), so a CPU-only deployment that names no ``model`` still gets a
+sensible default rather than one the flag it set would reject."""
+
+CPU_MODEL_PARAM_LIMIT = 0.6
+"""Smallest parameter count, in billions, that a model's name may advertise
+before :func:`is_cpu_friendly` calls it unsuitable for CPU-only inference.
+
+OVOS deployments routinely run STT on satellite-class hardware (a Raspberry Pi
+or similar), where a model at or above this size is impractically slow or
+exhausts memory. The registry carries no dedicated size field per model, so
+this reads the parameter count the catalogue already writes into every model's
+own id (``nemo-canary-1b-v2``, ``qwen3-asr-0.6b-onnx``) rather than keeping a
+second, hand-maintained list that could drift from what the ids say."""
+
+_SIZE_RE = re.compile(r"(?:^|[-_])(\d+(?:\.\d+)?)b(?:[-_]|$)", re.IGNORECASE)
+
+
+def model_param_count(model_id: str) -> Optional[float]:
+    """
+    Give the parameter count, in billions, that ``model_id`` advertises in its
+    own name, or None when the id carries no such marker.
+
+    A model without a size marker in its name is not assumed to be large.
+    """
+    match = _SIZE_RE.search(model_id)
+    return float(match.group(1)) if match else None
+
+
+def is_cpu_friendly(model_id: str) -> bool:
+    """
+    True unless ``model_id``'s name advertises a parameter count at or above
+    :data:`CPU_MODEL_PARAM_LIMIT`.
+    """
+    count = model_param_count(model_id)
+    return count is None or count < CPU_MODEL_PARAM_LIMIT
+
+
+def cpu_friendly_only(table: Dict[str, str]) -> Dict[str, str]:
+    """Return ``table`` without the languages a CPU-unfriendly model serves."""
+    return {lang: model for lang, model in table.items()
+            if is_cpu_friendly(model)}
 
 KNOWN_BAD_MODELS: Dict[str, str] = {}
 """Model id -> why the model must never be a default.
@@ -240,7 +289,8 @@ def _match(tag: str, table: Dict[str, str]) -> Optional[str]:
 def resolve_model(lang: str,
                   lang2model: Dict[str, str],
                   default_model: Optional[str] = None,
-                  configured_model: Optional[str] = None) -> Optional[str]:
+                  configured_model: Optional[str] = None,
+                  registry: Optional[Dict[str, str]] = None) -> Optional[str]:
     """
     Pick the model for ``lang`` (a BCP-47 tag, any case, hyphens or underscores).
 
@@ -262,16 +312,20 @@ def resolve_model(lang: str,
             It names one model for every language, so it wins over the registry:
             an operator who asks for a model gets that model. Leave it out to let
             the registry pick per language.
+        registry: the built-in per-language table to fall back to. Defaults to
+            :data:`LANG_DEFAULTS`; a caller filtering the registry (e.g. for
+            ``cpu_models_only``) passes the filtered table here instead.
     """
+    table = LANG_DEFAULTS if registry is None else registry
     tag = standardize_lang(lang)
     env = env_lang_defaults()
-    for table in (lang2model, env):
-        match = _match(tag, table)
+    for t in (lang2model, env):
+        match = _match(tag, t)
         if match:
-            return table[match]
+            return t[match]
     if configured_model:
         return configured_model
-    match = _match(tag, LANG_DEFAULTS)
+    match = _match(tag, table)
     if match:
-        return LANG_DEFAULTS[match]
+        return table[match]
     return default_model
