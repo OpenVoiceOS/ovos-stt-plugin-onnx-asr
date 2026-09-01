@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.6.0a1) (2026-09-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.5.0a1...0.6.0a1)
+
+**Merged pull requests:**
+
+- feat: support fork model families \(espnet-ctc/aed, speech-llm/SALM\) [\#24](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/24) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.5.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.5.0a1) (2026-09-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.2a2...0.5.0a1)
