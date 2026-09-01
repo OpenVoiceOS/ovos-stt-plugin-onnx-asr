@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.5.0a1) (2026-09-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.2a2...0.5.0a1)
+
+**Merged pull requests:**
+
+- feat: add cpu\_models\_only config flag to restrict model selection [\#34](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/34) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.4.2a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.4.2a2) (2026-08-13)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.4.2a1...0.4.2a2)
