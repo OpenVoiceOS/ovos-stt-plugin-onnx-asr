@@ -115,12 +115,41 @@ For finer control (e.g. TensorRT) set `providers` directly; it overrides `use_cu
 The `model` option accepts either a built-in `onnx-asr` alias or any Hugging Face
 repo id whose `config.json` declares a supported `model_type` (NeMo
 Conformer/FastConformer with CTC, RNN-T, TDT or Canary/AED decoder, Whisper, Vosk,
-GigaAM, T-one or wav2vec2-CTC). Streaming, LLM-decoder and TTS checkpoints are not
-supported.
+GigaAM, T-one or wav2vec2-CTC — plus, with the fork pin below: `speech-llm`,
+`espnet-ctc`/`espnet-aed`, `granite-nar`, `sensevoice`, `moonshine` and
+`wav2vec2-adapters`). Streaming and TTS checkpoints are not supported.
 
-`language` is only meaningful for Whisper and Canary models (and
-`target_language` for Canary); the plugin passes them automatically only to those
-families.
+`language` is meaningful for Whisper, Canary/AED, speech-llm and
+wav2vec2-adapters models (`target_language` for Canary); the plugin passes it
+automatically only to those families.
+
+### Choosing a model: architecture tiers
+
+Models in the [STT/ASR - onnx collection](https://huggingface.co/collections/OpenVoiceOS/stt-asr-onnx-699321e8732462509c642fbe)
+span several architecture families. They trade accuracy against size and speed in
+a fairly consistent order. RTF = real-time factor on a mid-range desktop CPU
+(AMD Ryzen 5 7600); lower is faster, below 1.0 is faster than real time.
+
+| Tier | Families | Size | CPU speed | When to use |
+| --- | --- | --- | --- | --- |
+| Speech-LLM | `speech-llm` (Qwen3-ASR, Canary-Qwen, Granite, Voxtral, AMALIA), `granite-nar` | 1–19 GB | RTF ~0.3–1.3 (int8); NAR variant ~0.3 fp32 | Best accuracy available. Use on a server with RAM to spare, or when transcription quality matters more than latency. The 9B models effectively need a GPU. |
+| Attention encoder-decoder | `nemo-conformer-aed` (Canary, Cohere Transcribe), Whisper large / `espnet-aed` | 1–8 GB | RTF ~0.2–0.9 (int8) | Strong accuracy with punctuation and casing. Good server default. Cohere Transcribe covers 14 languages at RTF ~0.19 int8. |
+| Conformer CTC / transducer | `nemo-conformer-ctc/rnnt/tdt` (Parakeet), GigaAM, Vosk | 0.1–2.5 GB | RTF ~0.05–0.3 | The practical sweet spot for assistants: fast, small, accurate for their languages. `nemo-parakeet-tdt-0.6b-v3` is the plugin default for good reason. |
+| Compact Whisper | whisper small/medium, distil, lite-whisper | 0.2–1 GB (int8) | RTF ~0.3–1.0 | Many language fine-tunes only exist as Whisper checkpoints. Use the fine-tune for your language when one exists. |
+| Tiny specialists | `sensevoice` (zh/en/ja/ko/yue), `moonshine` (en) | 60–950 MB | RTF ~0.02–0.04 | Fastest options by far. Use on constrained hardware (Raspberry Pi class) for their languages. |
+| wav2vec2 CTC / MMS | `wav2vec2-ctc`, `wav2vec2-adapters` (MMS, 1100+ languages) | ~1 GB int8 base | RTF ~0.15 | Lowest accuracy tier: character-level output, no punctuation or casing, narrow training domains. **But for hundreds of languages this is the only model that exists.** Something is better than nothing. |
+
+Rules of thumb:
+
+- A dedicated fine-tune for your language beats a bigger multilingual model more
+  often than not. Check the collection for your language tag first.
+- If your language has a Whisper or Conformer fine-tune, prefer it over MMS.
+  Use `wav2vec2-adapters` (MMS) when nothing else covers the language.
+- int8 quantization roughly quarters the size. For autoregressive models it is
+  usually ~2x faster on CPU; for single-pass models (NAR, CTC) it can be slower —
+  check the model card, each states its measured numbers.
+- Speech-LLM and AED models emit punctuation and casing; CTC-family models
+  generally do not.
 
 ### Built-in aliases (Nvidia NeMo, Whisper, GigaAM, Vosk, T-one)
 
@@ -306,6 +335,40 @@ For the full list of built-in aliases and benchmarks, see the [onnx-asr reposito
 
 wav2vec2 and XLS-R CTC fine-tunes load by repo id with no extra setup. See
 [docs/models.md](docs/models.md).
+
+### Fork model families (draft, pinned to a fork branch)
+
+`istupakov/onnx-asr` does not yet support three model families used by some of
+our HF exports: **ESPnet E-Branchformer** (CTC and attention-decoder variants)
+and **Speech-LLM** (audio encoder + projector + causal LM, covers both plain
+Qwen3-ASR-style prompting and the SALM variant used by Canary-Qwen). Until
+that lands upstream, this plugin can only load those repos against
+[TigreGotico/onnx-asr](https://github.com/TigreGotico/onnx-asr)'s `integration`
+branch — see `requirements.txt`. This is why the PR that added this section
+stays a draft: a git ref in `install_requires` breaks PyPI publishing, so it
+must revert to a normal version floor once the upstream PRs merge and release.
+
+Upstream tracking PRs (parity benchmarks and RTF numbers in each):
+
+* [istupakov/onnx-asr#3](https://github.com/TigreGotico/onnx-asr/pull/3) — speech-llm model family (Qwen3-ASR)
+* [istupakov/onnx-asr#4](https://github.com/TigreGotico/onnx-asr/pull/4) — ESPnet E-Branchformer models (espnet-ctc / espnet-aed) + w2v-BERT 2.0 preprocessor
+* [istupakov/onnx-asr#5](https://github.com/TigreGotico/onnx-asr/pull/5) — SALM encoder shape for speech-llm (Canary-Qwen-2.5B)
+
+No plugin config changes are needed to use these models: set `model` to the
+HF repo id as usual, the model type comes from the repo's `config.json`. The
+plugin also passes a `language` hint to Speech-LLM models the same way it
+does for Whisper and Canary.
+
+| Model | Family | HF repo | Fork branch |
+| --- | --- | --- | --- |
+| INESC-ID e-branchformer (European Portuguese), CTC | `espnet-ctc` | [OpenVoiceOS/inesc-id-ebranch-w2vbert2-ep-ctc-onnx](https://huggingface.co/OpenVoiceOS/inesc-id-ebranch-w2vbert2-ep-ctc-onnx) | `integration` |
+| INESC-ID e-branchformer (European Portuguese), attention decoder | `espnet-aed` | [OpenVoiceOS/inesc-id-ebranch-w2vbert2-ep-aed-onnx](https://huggingface.co/OpenVoiceOS/inesc-id-ebranch-w2vbert2-ep-aed-onnx) | `integration` |
+| Qwen3-ASR 0.6B | `speech-llm` | [OpenVoiceOS/qwen3-asr-0.6b-onnx](https://huggingface.co/OpenVoiceOS/qwen3-asr-0.6b-onnx) | `integration` |
+| Qwen3-ASR 1.7B | `speech-llm` | [OpenVoiceOS/qwen3-asr-1.7b-onnx](https://huggingface.co/OpenVoiceOS/qwen3-asr-1.7b-onnx) | `integration` |
+| Canary-Qwen 2.5B (SALM) | `speech-llm` | [OpenVoiceOS/canary-qwen-2.5b-onnx](https://huggingface.co/OpenVoiceOS/canary-qwen-2.5b-onnx) | `integration` (needs the SALM commit, included) |
+| Granite Speech 3.3 2B | `speech-llm` | [OpenVoiceOS/granite-speech-3.3-2b-onnx](https://huggingface.co/OpenVoiceOS/granite-speech-3.3-2b-onnx) | `integration` |
+| INESC-ID Whisper large-v3 (European Portuguese fine-tune) | Whisper | [OpenVoiceOS/inesc-id-whisperlv3-ft-ep-onnx](https://huggingface.co/OpenVoiceOS/inesc-id-whisperlv3-ft-ep-onnx) | none — Whisper is already supported |
+| Camões Whisper (Portuguese) | Whisper | [OpenVoiceOS/camoes-whisper-asr-onnx](https://huggingface.co/OpenVoiceOS/camoes-whisper-asr-onnx) | none — Whisper is already supported |
 
 ## Credits
 

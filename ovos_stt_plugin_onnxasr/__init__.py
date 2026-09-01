@@ -170,8 +170,10 @@ class OnnxASR(STT):
         # models, and `target_language` only for Canary. Passing them to
         # other architectures is outside the RecognizeOptions contract,
         # so gate them on the loaded model family.
+        # SpeechLlm covers the fork's speech-llm/SALM family
+        # (TigreGotico/onnx-asr integration branch) until it upstreams.
         asr_name = type(model.asr).__name__
-        accepts_language = "Whisper" in asr_name or asr_name == "NemoConformerAED"
+        accepts_language = "Whisper" in asr_name or asr_name in ("NemoConformerAED", "SpeechLlm", "Wav2Vec2Adapters")
         accepts_target_language = asr_name == "NemoConformerAED"
         # A Whisper decoder selects the language through a "<|xx|>" token in
         # its vocabulary, so a fine-tune into a language Whisper never carried
