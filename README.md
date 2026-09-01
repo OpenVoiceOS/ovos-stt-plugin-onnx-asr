@@ -62,6 +62,35 @@ A registry model whose repository holds no quantized weights loads fp32, even wi
 | `quantization` | `null` | Set to `"int8"` to load the quantized weights for faster, lower-memory CPU inference. Requires the repo to ship `*.int8.onnx` files; loading fails if they are absent, except for a model the built-in registry picked, which then loads fp32. int8 trades a small accuracy drop (typically a few WER points, less on larger models) for ~3-4x smaller models. |
 | `use_cuda` | `false` | Run on the GPU via the CUDA execution provider (with a CPU fallback). |
 | `providers` | `null` | Explicit list of onnxruntime execution providers, e.g. `["CUDAExecutionProvider", "CPUExecutionProvider"]` or `["TensorrtExecutionProvider"]`. Takes precedence over `use_cuda`. |
+| `cpu_models_only` | `false` | Restrict model selection to models practical on CPU-only hardware. See below. |
+
+### CPU-only deployments
+
+A satellite or server that will only ever run on CPU should set `cpu_models_only`
+rather than trust every operator, or every future config change, to keep clear of
+a model that expects a GPU. On, it drops any model whose id advertises a
+parameter count of 0.6B or more (the size the catalogue already writes into model
+ids like `nemo-canary-1b-v2` or `qwen3-asr-0.6b-onnx`) from the built-in
+per-language registry, and it swaps the ultimate fallback from
+`nemo-canary-1b-v2` (1B) to `whisper-base` (74M, the plugin's other multilingual
+coverage model).
+
+```json
+{
+  "stt": {
+    "module": "ovos-stt-plugin-onnx-asr",
+    "ovos-stt-plugin-onnx-asr": {
+      "cpu_models_only": true
+    }
+  }
+}
+```
+
+Naming an excluded model explicitly, through `model` or `lang2model`, is refused
+at startup rather than silently swapped for a different one: the config is
+wrong, and running a different model than the one named is worse than saying so.
+`cpu_models_only` is off by default, so leaving it unset keeps every model in
+the catalogue selectable, exactly as before the option existed.
 
 ### GPU acceleration
 
