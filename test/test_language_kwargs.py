@@ -65,6 +65,21 @@ class TestLanguageKwargs(unittest.TestCase):
         captured = self._run("NemoConformerRnnt")
         self.assertEqual(captured, {})
 
+    def test_speech_llm_gets_language_only(self):
+        # SpeechLlm (Qwen3-ASR, SALM/Canary-Qwen) — fork model family, see README.
+        captured = self._run("SpeechLlm")
+        self.assertEqual(captured, {"language": "es"})
+
+    def test_wav2vec2_adapters_gets_language_only(self):
+        # Wav2Vec2Adapters (MMS shared-base + per-language adapter packs) — fork family.
+        captured = self._run("Wav2Vec2Adapters")
+        self.assertEqual(captured, {"language": "es"})
+
+    def test_espnet_aed_gets_no_language_kwargs(self):
+        # ESPnet AED decoding is not language-conditioned, unlike Canary/Whisper.
+        captured = self._run("EspnetAED")
+        self.assertEqual(captured, {})
+
     def test_falls_back_to_instance_lang(self):
         captured = {}
         with patch("onnx_asr.load_model", return_value=_fake_adapter("WhisperHf", captured)):

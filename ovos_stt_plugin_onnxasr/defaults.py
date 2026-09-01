@@ -143,6 +143,14 @@ for _l in ("ar zh ja ko tr vi th id ms he fa sq sr mk bs is no nn cy af "
     LANG_DEFAULTS[_l] = _WHISPER
 
 # dedicated fine-tunes — better than the multilingual fillers on their language
+#
+# pt/pt-PT alternatives (not defaults, need the TigreGotico/onnx-asr `integration`
+# fork branch until espnet-ctc/espnet-aed upstreams — see README "Fork model
+# families" section): set via `lang2model` or `ONNX_ASR_DEFAULT_PT`/`_PT_PT`.
+#   OpenVoiceOS/inesc-id-ebranch-w2vbert2-ep-ctc-onnx   (espnet-ctc, fast)
+#   OpenVoiceOS/inesc-id-ebranch-w2vbert2-ep-aed-onnx   (espnet-aed, more accurate)
+#   OpenVoiceOS/inesc-id-whisperlv3-ft-ep-onnx          (Whisper, needs no fork)
+#   OpenVoiceOS/camoes-whisper-asr-onnx                 (Whisper, needs no fork)
 LANG_DEFAULTS.update({
     "ru": "gigaam-v2-rnnt",
     "pt": "OpenVoiceOS/yuriyvnv-parakeet-tdt-0.6b-pt-onnx",
