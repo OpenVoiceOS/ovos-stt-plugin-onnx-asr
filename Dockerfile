@@ -3,7 +3,7 @@
 # The opm.stt entry point (ovos-stt-plugin-onnx-asr) does nothing on its own
 # -- it needs a server front-end, so this image runs ovos-stt-server with
 # that engine on the server's default port.
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 RUN useradd -m -u 1000 ovos
 
