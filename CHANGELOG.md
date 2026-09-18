@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.6.0a2) (2026-09-18)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.6.0a1...0.6.0a2)
+
+**Merged pull requests:**
+
+- ci: install setuptools with the build tools [\#38](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/38) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.6.0a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.6.0a1) (2026-09-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.5.0a1...0.6.0a1)
