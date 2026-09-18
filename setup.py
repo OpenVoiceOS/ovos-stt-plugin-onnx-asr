@@ -60,7 +60,9 @@ setup(
     author='JarbasAi',
     author_email='jarbasai@mailfence.com',
     license='Apache-2.0',
-    packages=['ovos_stt_plugin_onnxasr'],
+    packages=['ovos_stt_plugin_onnxasr',
+              'ovos_stt_plugin_onnxasr._shims',
+              'ovos_stt_plugin_onnxasr._shims._vendored'],
     install_requires=required("requirements.txt"),
     zip_safe=True,
     classifiers=[
