@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from os.path import join
 from threading import RLock
 from typing import List, Optional
 
@@ -8,6 +9,7 @@ from ovos_spec_tools.language import standardize_lang
 from ovos_plugin_manager.utils.audio import AudioData
 
 from ovos_utils.log import LOG
+from ovos_utils.xdg_utils import xdg_data_home
 
 from ovos_stt_plugin_onnxasr._compat import ensure_model_types
 from ovos_stt_plugin_onnxasr.defaults import (DEFAULT_CPU_MODEL, DEFAULT_MODEL,
@@ -164,6 +166,7 @@ class OnnxASR(STT):
             LOG.info(f"onnx-asr using providers: {providers}")
         LOG.info(f"loading onnx-asr model: {model_id}")
         model = onnx_asr.load_model(model_id,
+                                    path=self._model_dir(model_id),
                                     quantization=quantization,
                                     providers=providers)
         # onnx-asr accepts a `language` hint only for Whisper and Canary
@@ -193,6 +196,37 @@ class OnnxASR(STT):
             self._models.move_to_end(model_id)
             self._evict_lru()
         return entry
+
+    def _model_dir(self, model_id: str) -> str:
+        """
+        Directory to hold ``model_id``'s files, one plain directory per model.
+
+        onnx-asr passes this to ``snapshot_download`` as ``local_dir``, which
+        writes real files. Without it the download lands in the shared
+        Hugging Face cache, where every file is a blob under ``blobs/`` and
+        the snapshot directory holds symlinks to them.
+
+        That layout does not load. A model whose weights sit in an external
+        ``.onnx_data`` file names it as a sibling, and onnxruntime 1.30
+        resolves the symlinked model to its blob before looking for that
+        sibling, so the sibling lands outside the model's directory and
+        validation refuses it:
+
+            External data path validation failed for initializer:
+            decoder.prediction.embed.weight. Error: External data path
+            escapes model directory.
+
+        22 of the 47 models this plugin's registry names ship ``.onnx_data``,
+        so this is most of the nemo and whisper-small fleet rather than one
+        model. Measured in T-4461.
+
+        ``model_dir`` in the plugin config names the root; the default sits
+        under the XDG data directory. The model id becomes one path segment,
+        so ``OpenVoiceOS/x`` and a bare ``x`` cannot collide.
+        """
+        root = self.config.get("model_dir") or join(
+            xdg_data_home(), "ovos_stt_plugin_onnxasr")
+        return join(root, model_id.replace("/", "--"))
 
     def _evict_lru(self, headroom: int = 0):
         """
