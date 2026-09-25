@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.6.1a1) (2026-09-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.6.0a2...0.6.1a1)
+
+**Merged pull requests:**
+
+- fix: download each model into a plain directory, not the HF cache [\#40](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/40) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [0.6.0a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.6.0a2) (2026-09-18)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.6.0a1...0.6.0a2)
