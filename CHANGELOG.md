@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1a2](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.6.1a2) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.6.1a1...0.6.1a2)
+
+**Merged pull requests:**
+
+- Update dependency python [\#35](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/pull/35) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [0.6.1a1](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/tree/0.6.1a1) (2026-09-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr/compare/0.6.0a2...0.6.1a1)
