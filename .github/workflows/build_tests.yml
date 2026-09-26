@@ -21,12 +21,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt install python3-dev swig portaudio19-dev libpulse-dev
-      - name: Build Source Packages
-        run: |
-          python setup.py sdist
       - name: Build Distribution Packages
         run: |
-          python setup.py sdist bdist_wheel
+          python -m build
       - name: Install package
         run: |
           pip install .
