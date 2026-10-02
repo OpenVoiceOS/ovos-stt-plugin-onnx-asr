@@ -8,11 +8,20 @@ This plugin enables OpenVoiceOS to use state-of-the-art ASR models exported to O
 
 ## Install
 
-To install the plugin, use `pip`. You also need to ensure the backend dependencies are installed.
+To install the plugin, use `pip`. Name a runtime extra, because `onnx-asr`
+ships no inference runtime by default:
 
 ```bash
-pip install ovos-stt-plugin-onnx-asr
+pip install ovos-stt-plugin-onnx-asr[cpu]
 ```
+
+`[cpu]` brings `onnxruntime`. For a GPU box use `[gpu]`, which brings
+`onnxruntime-gpu` instead. Install exactly one of the two: see
+[GPU acceleration](#gpu-acceleration). The model downloader
+(`huggingface-hub`) comes with the plugin itself. With no runtime extra the
+entry point cannot load: `ovos-plugin-manager` logs
+`Failed to load plugin entry point ...: No module named 'onnxruntime'` and
+answers `None`, so the STT module looks absent.
 
 To run this plugin as a standalone server in a container, see
 [docs/docker.md](docs/docker.md) and [docs/deployment.md](docs/deployment.md).
@@ -94,7 +103,24 @@ the catalogue selectable, exactly as before the option existed.
 
 ### GPU acceleration
 
-To run on the GPU, install `onnxruntime-gpu` (in place of the default `onnxruntime`) with a matching CUDA/cuDNN runtime, then set `use_cuda`:
+To run on the GPU, install the `gpu` extra with a matching CUDA/cuDNN runtime,
+then set `use_cuda`:
+
+```bash
+pip uninstall -y onnxruntime
+pip install ovos-stt-plugin-onnx-asr[gpu]
+```
+
+Remove `onnxruntime` first. It is not replaced: `onnxruntime` and
+`onnxruntime-gpu` both install the same `onnxruntime` module, pip reports no
+conflict, and whichever wheel's files land last on disk answers import
+requests. With both present `onnxruntime.get_available_providers()` can answer
+`['AzureExecutionProvider', 'CPUExecutionProvider']`, so `use_cuda` and
+`providers` stop working and the plugin runs on the CPU without saying so, with
+no install order that is safe to rely on. With `onnxruntime-gpu` alone it
+answers
+`['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']`.
+
 
 ```json
 {

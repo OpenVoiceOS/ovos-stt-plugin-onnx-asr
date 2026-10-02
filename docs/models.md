@@ -3,9 +3,11 @@
 The plugin loads models with `onnx-asr`. A model is loadable when its
 `config.json` declares a `model_type` that `onnx-asr` knows.
 
-`onnx-asr` knows some model types itself. The plugin adds the others at start-up,
-so a plain `pip install onnx-asr` is sufficient. No model type needs a different
-installation, and you do not have to switch anything on.
+`onnx-asr` knows some model types itself. The plugin adds the others at start-up.
+No model type needs a package that another one does not, and you do not have to
+switch anything on. Every model type needs the runtime extra from the
+[install instructions](../README.md#install), and no model type needs more than
+that.
 
 Adding a model type makes `onnx-asr` resolve and load models of that architecture.
 It does not tell you that a given conversion transcribes correctly. Test the model

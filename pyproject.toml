@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ovos-stt-plugin-onnx-asr"
+dynamic = ["version"]
+description = "A onnx stt plugin for OVOS"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [
+    {name = "JarbasAi", email = "jarbasai@mailfence.com"}
+]
+keywords = ["ovos", "plugin", "stt"]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "ovos-plugin-manager>=2.1.1,<3.0.0",
+    # onnx-asr keeps every runtime behind an extra, and it keeps the model
+    # downloader behind one too. [hub] is unconditional because every model id
+    # resolves from Hugging Face. The runtime is an extra on this plugin,
+    # because onnxruntime and onnxruntime-gpu do not co-install: both ship the
+    # same onnxruntime module, and whichever wheel's files land last on disk
+    # answers import requests, with no error either way. A required cpu extra
+    # beside a gpu install risks ['AzureExecutionProvider',
+    # 'CPUExecutionProvider'] with CUDA silently disabled. A missing runtime
+    # names itself: the entry point raises ModuleNotFoundError('onnxruntime'),
+    # ovos-plugin-manager logs it, and one extra fixes it. A hidden GPU never
+    # announces itself at all.
+    "onnx_asr[hub]>=0.11.0",
+    "ovos-spec-tools>=1.6.0a2,<2.0.0",
+]
+
+[project.optional-dependencies]
+# The normal install is `pip install ovos-stt-plugin-onnx-asr[cpu]`. Pick
+# exactly one of these two.
+cpu = [
+    "onnx_asr[cpu]>=0.11.0",
+]
+gpu = [
+    "onnx_asr[gpu]>=0.11.0",
+]
+test = [
+    "pytest",
+    "pytest-randomly",
+]
+
+[project.urls]
+Homepage = "https://github.com/OpenVoiceOS/ovos-stt-plugin-onnx-asr"
+
+[project.entry-points."opm.stt"]
+"ovos-stt-plugin-onnx-asr" = "ovos_stt_plugin_onnxasr:OnnxASR"
+
+[tool.setuptools.dynamic]
+version = {attr = "ovos_stt_plugin_onnxasr.version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ovos_stt_plugin_onnxasr*"]
