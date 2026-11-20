@@ -1,7 +1,15 @@
+import os
+import shutil
 from collections import OrderedDict
+from contextlib import contextmanager
 from os.path import join
 from threading import RLock
 from typing import List, Optional
+
+try:
+    import fcntl
+except ImportError:  # Windows: no advisory locks, one loader at a time is not enforced
+    fcntl = None
 
 import onnx_asr
 from ovos_plugin_manager.templates.stt import STT
@@ -165,10 +173,7 @@ class OnnxASR(STT):
         if providers:
             LOG.info(f"onnx-asr using providers: {providers}")
         LOG.info(f"loading onnx-asr model: {model_id}")
-        model = onnx_asr.load_model(model_id,
-                                    path=self._model_dir(model_id),
-                                    quantization=quantization,
-                                    providers=providers)
+        model = self._load(model_id, quantization, providers)
         # onnx-asr accepts a `language` hint only for Whisper and Canary
         # models, and `target_language` only for Canary. Passing them to
         # other architectures is outside the RecognizeOptions contract,
@@ -227,6 +232,75 @@ class OnnxASR(STT):
         root = self.config.get("model_dir") or join(
             xdg_data_home(), "ovos_stt_plugin_onnxasr")
         return join(root, model_id.replace("/", "--"))
+
+    def _load(self, model_id: str, quantization: Optional[str],
+              providers: Optional[List[str]]):
+        """
+        Load ``model_id`` from its directory, downloading it again when a
+        download left the directory without a file the model needs.
+
+        onnx-asr downloads only into a directory that does not exist yet. Once
+        the directory exists it loads from it and never asks the network
+        again. A download that was interrupted, or a directory that holds the
+        files of another ``quantization``, therefore fails with
+        ``ModelFileNotFoundError`` on every start, until someone removes the
+        directory by hand.
+
+        A directory that a download filled is removed and downloaded once
+        more. A directory somebody filled by hand is left as it is, and the
+        error is raised: there may be no repository to fetch it from again.
+        """
+        directory = self._model_dir(model_id)
+
+        def load():
+            return onnx_asr.load_model(model_id,
+                                       path=directory,
+                                       quantization=quantization,
+                                       providers=providers)
+
+        with self._one_loader(directory):
+            # onnx-asr only goes offline for a directory that is already there
+            offline = os.path.isdir(directory)
+            try:
+                return load()
+            except FileNotFoundError as missing:
+                if not (offline and self._was_downloaded(directory)):
+                    raise
+                LOG.warning(f"'{directory}' lacks a file the model needs "
+                            f"({missing}); removing it and downloading "
+                            f"'{model_id}' again")
+                shutil.rmtree(directory)
+            return load()
+
+    @staticmethod
+    def _was_downloaded(directory: str) -> bool:
+        """
+        Whether ``directory`` was filled by a Hugging Face download, which
+        keeps its bookkeeping in ``.cache/huggingface`` inside the directory.
+        """
+        return os.path.isdir(join(directory, ".cache", "huggingface"))
+
+    @staticmethod
+    @contextmanager
+    def _one_loader(directory: str):
+        """
+        Let one process at a time load from, or download into, ``directory``.
+
+        Two servers that share a volume would otherwise meet in it: the second
+        finds the first one's half-finished download, takes it for a broken
+        one and removes it. The lock is a file next to the directory. Where
+        the platform or the filesystem has no such lock, loading goes ahead
+        without one.
+        """
+        os.makedirs(os.path.dirname(directory), exist_ok=True)
+        with open(directory + ".lock", "a") as handle:
+            if fcntl is not None:
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX)
+                except OSError as error:
+                    LOG.debug(f"no lock on '{handle.name}': {error}")
+            # closing the file releases the lock
+            yield
 
     def _evict_lru(self, headroom: int = 0):
         """
