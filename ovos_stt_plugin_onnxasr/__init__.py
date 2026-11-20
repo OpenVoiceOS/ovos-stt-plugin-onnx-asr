@@ -1,7 +1,7 @@
 import os
 import shutil
 from collections import OrderedDict
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from os.path import join
 from threading import RLock
 from typing import List, Optional
@@ -269,7 +269,8 @@ class OnnxASR(STT):
                 LOG.warning(f"'{directory}' lacks a file the model needs "
                             f"({missing}); removing it and downloading "
                             f"'{model_id}' again")
-                shutil.rmtree(directory)
+                if not self._removed(directory):
+                    raise
             return load()
 
     @staticmethod
@@ -281,6 +282,20 @@ class OnnxASR(STT):
         return os.path.isdir(join(directory, ".cache", "huggingface"))
 
     @staticmethod
+    def _removed(directory: str) -> bool:
+        """
+        Remove ``directory``. False when it cannot be removed, for example on
+        a read-only volume: the caller then raises the error it already has.
+        """
+        try:
+            shutil.rmtree(directory)
+        except OSError as error:
+            LOG.error(f"'{directory}' could not be removed ({error}); "
+                      f"remove it by hand to download the model again")
+            return False
+        return True
+
+    @staticmethod
     @contextmanager
     def _one_loader(directory: str):
         """
@@ -289,17 +304,19 @@ class OnnxASR(STT):
         Two servers that share a volume would otherwise meet in it: the second
         finds the first one's half-finished download, takes it for a broken
         one and removes it. The lock is a file next to the directory. Where
-        the platform or the filesystem has no such lock, loading goes ahead
-        without one.
+        that file cannot be made or locked (a read-only volume, a filesystem
+        or a platform without such locks), loading goes ahead without one: a
+        complete model on a read-only volume must load as it did before.
         """
-        os.makedirs(os.path.dirname(directory), exist_ok=True)
-        with open(directory + ".lock", "a") as handle:
-            if fcntl is not None:
-                try:
+        with ExitStack() as stack:
+            try:
+                os.makedirs(os.path.dirname(directory), exist_ok=True)
+                handle = stack.enter_context(open(directory + ".lock", "a"))
+                if fcntl is not None:
                     fcntl.flock(handle, fcntl.LOCK_EX)
-                except OSError as error:
-                    LOG.debug(f"no lock on '{handle.name}': {error}")
-            # closing the file releases the lock
+            except OSError as error:
+                LOG.debug(f"no lock for '{directory}': {error}")
+            # leaving this block closes the file, which releases the lock
             yield
 
     def _evict_lru(self, headroom: int = 0):

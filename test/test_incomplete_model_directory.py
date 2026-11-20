@@ -9,7 +9,7 @@ import shutil
 import tempfile
 import threading
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import onnx_asr
 
@@ -129,6 +129,39 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         for name in NEEDED:
             self.assertTrue(os.path.isfile(os.path.join(other, name)))
 
+    def test_a_complete_model_loads_when_no_lock_file_can_be_made(self):
+        hub = _Hub()
+        hub.download(self.directory)
+        denied = PermissionError(13, "Permission denied")
+        with patch("ovos_stt_plugin_onnxasr.open", side_effect=denied, create=True) as opened:
+            stt = self._stt(hub)
+        opened.assert_called_once_with(self.directory + ".lock", "a")
+        self.assertIn("some-model", stt._models)
+        self.assertEqual((hub.downloads, hub.loads), (0, 1))
+
+    @unittest.skipIf(os.name == "nt" or os.geteuid() == 0,
+                     "needs a directory this user cannot write to")
+    def test_a_complete_model_loads_from_a_read_only_volume(self):
+        hub = _Hub()
+        hub.download(self.directory)
+        os.chmod(self.root, 0o555)
+        self.addCleanup(os.chmod, self.root, 0o755)
+        stt = self._stt(hub)
+        self.assertIn("some-model", stt._models)
+        self.assertEqual((hub.downloads, hub.loads), (0, 1))
+        self.assertEqual(os.listdir(self.root), ["some-model"])
+
+    def test_a_directory_that_cannot_be_removed_keeps_the_first_error(self):
+        # a read-only volume: the reader must see which file is missing, not why rmtree failed
+        hub = _Hub()
+        hub.download(self.directory, files=NEEDED[:2])
+        with patch("ovos_stt_plugin_onnxasr.shutil.rmtree",
+                   side_effect=OSError(30, "Read-only file system")), \
+                self.assertRaises(FileNotFoundError):
+            self._stt(hub)
+        self.assertEqual((hub.downloads, hub.loads), (0, 1))
+        self.assertTrue(os.path.isfile(os.path.join(self.directory, NEEDED[0])))
+
     @unittest.skipIf(os.name == "nt", "no advisory file locks on Windows")
     def test_a_second_loader_waits_for_the_first_one_s_download(self):
         """Two servers on one volume: the second must not find the first one's
@@ -160,17 +193,32 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         onnx_asr.load_model = hub.load_model
         self.addCleanup(setattr, onnx_asr, "load_model", previous)
         config = {"lang": "en-US", "model": "some-model", "model_dir": self.root}
-        first = threading.Thread(target=OnnxASR, kwargs={"config": dict(config)})
+        loaded, failed = [], []
+
+        def construct():
+            # ``join`` does not raise what its thread raised: keep it for the assertions
+            try:
+                loaded.append(OnnxASR(config=dict(config)))
+            except Exception as error:
+                failed.append(error)
+
+        first = threading.Thread(target=construct)
+        second = threading.Thread(target=construct)
         first.start()
-        self.assertTrue(started.wait(10))
-        second = threading.Thread(target=OnnxASR, kwargs={"config": dict(config)})
-        second.start()
-        second.join(0.5)
-        self.assertTrue(second.is_alive(), "the second loader did not wait")
-        finish.set()
-        first.join(10)
-        second.join(10)
-        self.assertFalse(second.is_alive())
+        try:
+            self.assertTrue(started.wait(10))
+            second.start()
+            second.join(0.5)
+            self.assertTrue(second.is_alive(), "the second loader did not wait")
+        finally:
+            # whatever failed above, no worker may outlive the patched globals
+            finish.set()
+            first.join(10)
+            if second.ident is not None:
+                second.join(10)
+        self.assertFalse(first.is_alive() or second.is_alive())
+        self.assertEqual(failed, [])
+        self.assertEqual(len(loaded), 2)
         self.assertEqual(removed, [], "a download in progress was removed")
         self.assertEqual(hub.downloads, 1)
 
