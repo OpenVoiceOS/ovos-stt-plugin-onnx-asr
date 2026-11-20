@@ -3,6 +3,7 @@ from os.path import join
 from threading import RLock
 from typing import List, Optional
 
+import numpy as np
 import onnx_asr
 from ovos_plugin_manager.templates.stt import STT
 from ovos_spec_tools.language import standardize_lang
@@ -78,6 +79,16 @@ class OnnxASR(STT):
         # using it, so eviction cannot reach it.
         self.max_loaded_models = self._parse_max_loaded_models(
             self.config.get("max_loaded_models"))
+        # Pads each request's audio with silence up to the next multiple of
+        # this many seconds, so that most requests reach the model with the
+        # same length. On the CUDA execution provider a request whose audio is
+        # not as long as the one before pays for the convolutions being set up
+        # again: measured on a Tesla P40 with nemo-parakeet-tdt-0.6b-v3, 559 ms
+        # a request against 186 ms once every request was padded to 4 seconds.
+        # The silence can change what a model writes ("ten" became "10"), so
+        # it is unset by default and the audio is passed on as it arrived.
+        self.pad_to_seconds = self._parse_pad_to_seconds(
+            self.config.get("pad_to_seconds"))
         # The server answers requests from a threadpool; the cache is mutated
         # from every one of those threads.
         self._lock = RLock()
@@ -108,6 +119,47 @@ class OnnxASR(STT):
                       f"least 1; the cache is unbounded")
             return None
         return parsed
+
+    @staticmethod
+    def _parse_pad_to_seconds(value) -> Optional[float]:
+        """
+        Normalize the ``pad_to_seconds`` config value to a positive float.
+
+        Configuration reaches plugins from hand-edited files and from
+        environment injection, so a value can arrive as a string. A value that
+        names no length -- unparseable, zero or negative -- is reported and
+        treated as unset, because refusing to start would take down a server
+        over a tuning knob.
+        """
+        if value is None:
+            return None
+        try:
+            # a bool is a number to float(), and names no length
+            parsed = None if isinstance(value, bool) else float(value)
+        except (TypeError, ValueError):
+            parsed = None
+        if parsed is None:
+            LOG.error(f"ignoring invalid pad_to_seconds: {value!r}")
+            return None
+        if not parsed > 0 or parsed == float("inf"):
+            LOG.error(f"ignoring pad_to_seconds={value!r}, it must be a "
+                      f"positive number of seconds; audio is not padded")
+            return None
+        return parsed
+
+    def _padded(self, waveform: np.ndarray, sample_rate: int) -> np.ndarray:
+        """
+        ``waveform`` with silence appended up to the next multiple of
+        ``pad_to_seconds``; unchanged when it already is one.
+        """
+        step = round(self.pad_to_seconds * sample_rate)
+        if step < 1:
+            return waveform
+        missing = -len(waveform) % step
+        if not missing:
+            return waveform
+        return np.concatenate(
+            [waveform, np.zeros(missing, dtype=waveform.dtype)])
 
     @staticmethod
     def _parse_cpu_models_only(value) -> bool:
@@ -338,8 +390,11 @@ class OnnxASR(STT):
             LOG.debug(f"'{model_id}' has no '{lang}' token; detecting instead")
         if accepts_target_language:
             kwargs["target_language"] = lang
+        waveform = audio.get_np_float32()
+        if self.pad_to_seconds:
+            waveform = self._padded(waveform, audio.sample_rate)
         text = model.recognize(
-            audio.get_np_float32(),
+            waveform,
             sample_rate=audio.sample_rate,
             **kwargs
         )
