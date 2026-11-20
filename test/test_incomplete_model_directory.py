@@ -226,16 +226,50 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         self.assertEqual(hub.first_downloads, [(self.directory, True)])
         self.assertEqual(self.locks.held, set(), "the lock was kept after the load")
 
-    def test_a_first_download_goes_on_without_the_lock_as_it_always_did(self):
-        for reason in ("held", "broken"):      # another server has it; no lock file can be made
-            with self.subTest(reason=reason):
-                shutil.rmtree(self.directory, ignore_errors=True)
-                locks = _Locks()
-                getattr(locks, reason).add(self.directory + ".lock")
-                self.locks = locks
-                hub = _Hub(locks=locks)
-                self.assertIn("some-model", self._stt(hub)._models)
-                self.assertEqual(hub.first_downloads, [(self.directory, reason == "held")])
+    def test_where_no_lock_can_be_made_a_first_download_goes_on_as_it_always_did(self):
+        self.locks.broken.add(self.directory + ".lock")
+        hub = _Hub(locks=self.locks)
+        self.assertIn("some-model", self._stt(hub)._models)
+        self.assertEqual(hub.first_downloads, [(self.directory, False)])
+
+    def test_while_another_process_makes_the_first_download_none_is_started(self):
+        self.locks.held.add(self.directory + ".lock")
+        hub = _Hub(locks=self.locks)
+        with self.assertRaises(RuntimeError) as raised:
+            self._stt(hub)
+        self.assertIn("another process is downloading", str(raised.exception))
+        self.assertEqual((hub.loads, hub.first_downloads), (0, []))
+        self.assertFalse(os.path.exists(self.directory))
+
+    def test_a_repository_named_in_full_needs_no_config_to_be_resumed(self):
+        hub = _Hub()
+        directory = os.path.join(self.root, "someone--some-model")   # the plugin's name for it
+        hub.put(directory, (GRAPHS[0],), unfinished=("config.json", GRAPHS[1], WEIGHTS))
+
+        def reads_the_config(model, local_dir, *, offline=None):
+            raise FileNotFoundError(f"File 'config.json' not found in path '{local_dir}'")
+
+        hub.create_asr_resolver = reads_the_config
+        modules = patch.dict(sys.modules, {
+            "onnx_asr.loader": types.SimpleNamespace(create_asr_resolver=hub.create_asr_resolver),
+            "huggingface_hub": types.SimpleNamespace(hf_hub_download=hub.hf_hub_download,
+                                                     HfApi=lambda: hub),
+            "filelock": types.SimpleNamespace(FileLock=self.locks.FileLock, Timeout=self.locks.Timeout),
+        })
+        with modules, patch.object(onnx_asr, "load_model", hub.load_model):
+            stt = OnnxASR(config={"lang": "en-US", "model": "someone/some-model",
+                                  "model_dir": self.root})
+        self.assertIn("someone/some-model", stt._models)
+        self.assertEqual([name for _, name, _ in hub.fetched], sorted(("config.json", GRAPHS[1], WEIGHTS)))
+        self.assertEqual({repo for repo, _, _ in hub.fetched}, {"someone/some-model"})
+
+    def test_files_with_no_record_of_their_commit_get_no_newer_ones(self):
+        # the client moves a file into place, then writes its metadata: a kill in between
+        hub = _Hub()
+        hub.put(self.directory, (), unfinished=FULL)
+        Path(self.directory, GRAPHS[0]).write_text("arrived, not recorded")
+        self._fails_as_before(hub, FileNotFoundError, LookupError)
+        self.assertEqual(hub.asked_for_newest, 0)
 
     def test_a_file_in_a_subdirectory_of_the_repository(self):
         hub = _Hub(needs=("config.json", "onnx/encoder.onnx"))
@@ -360,12 +394,15 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         # a complete model loads, and nothing is written next to it
         self.assertIn("some-model", self._stt(hub)._models)
         self.assertEqual(sorted(os.listdir(top)), ["broken", "some-model"])
-        # an incomplete one keeps the error that names the missing file
+        # an incomplete one keeps the error that names the missing file. No lock file
+        # can be made there, which the stand-in for filelock has to be told.
         self.root, self.directory = os.path.join(top, "broken"), broken
+        self.locks.broken.add(broken + ".lock")
         with self.assertRaises(FileNotFoundError) as raised:
             self._stt(hub)
         self.assertIn(GRAPHS[1], str(raised.exception))
-        self.assertIsInstance(raised.exception.__cause__, PermissionError)
+        self.assertIsInstance(raised.exception.__cause__, RuntimeError)
+        self.assertEqual(hub.fetched, [])
 
 
 if __name__ == "__main__":

@@ -247,7 +247,8 @@ class OnnxASR(STT):
 
         A process that downloads into the directory, for the first time or to
         finish, holds ``<directory>.lock`` while it does. The lock is only
-        ever tried: nobody waits for it.
+        ever tried: nobody waits for it. A process that finds it held does
+        not download; it fails at once.
         """
         directory = self._model_dir(model_id)
 
@@ -261,8 +262,13 @@ class OnnxASR(STT):
             # onnx-asr downloads it now. The lock tells a server that starts in
             # the meantime that this download is alive: without it, the files
             # this download has started look like the rest of a dead one.
-            with self._download_lock(directory):
-                return load()
+            with self._download_lock(directory) as alone:
+                if alone is False:
+                    # the directory is about to appear: a second download into it
+                    # would remove what the first one has just written
+                    raise RuntimeError(f"another process is downloading "
+                                       f"'{model_id}' into '{directory}'")
+                return load()  # also without a lock, as it always did
         try:
             return load()
         except Exception as error:
@@ -287,13 +293,12 @@ class OnnxASR(STT):
     @contextmanager
     def _download_lock(directory: str):
         """
-        Try to be the one process that downloads into ``directory``: true when
-        this process holds ``<directory>.lock``, false when another one holds
-        it or when the lock cannot be taken at all (no ``filelock``, a volume
-        that cannot be written, a filesystem without such locks). It never
-        waits.
+        Try to be the one process that downloads into ``directory``. True when
+        this process holds ``<directory>.lock``; False when another one holds
+        it; None when there is no lock to hold (no ``filelock``, a volume that
+        cannot be written, a filesystem without such locks). It never waits.
         """
-        lock = None
+        lock, alone = None, None
         try:
             from filelock import FileLock, Timeout
         except ImportError as error:
@@ -303,11 +308,14 @@ class OnnxASR(STT):
                 os.makedirs(os.path.dirname(directory), exist_ok=True)
                 lock = FileLock(directory + ".lock", timeout=0)
                 lock.acquire()
-            except (Timeout, OSError, NotImplementedError) as error:
+                alone = True
+            except Timeout:
+                lock, alone = None, False
+            except (OSError, NotImplementedError) as error:
                 LOG.debug(f"no download lock for '{directory}': {error!r}")
                 lock = None
         try:
-            yield lock is not None
+            yield alone
         finally:
             if lock is not None:
                 lock.release()
@@ -383,10 +391,21 @@ class OnnxASR(STT):
         from huggingface_hub import HfApi, hf_hub_download
         from onnx_asr.loader import create_asr_resolver
 
-        repository = create_asr_resolver(model_id, directory).repo_id
+        # a name with a slash is the repository, as it is for onnx-asr. Its
+        # resolver is not asked then: it reads config.json, which may be one of
+        # the files to fetch.
+        repository = model_id if "/" in model_id \
+            else create_asr_resolver(model_id, directory).repo_id
         if not repository:
             raise LookupError(f"'{model_id}' names no repository to download from")
-        revision = self._downloaded_revision(directory) or HfApi().model_info(repository).sha
+        revision = self._downloaded_revision(directory)
+        if revision is None:
+            # the client writes a file's metadata after the file: a file with no
+            # record may come from a commit that is not the newest any more
+            if any(name != ".cache" for name in os.listdir(directory)):
+                raise LookupError(f"'{directory}' holds files and no record of "
+                                  f"the commit they came from")
+            revision = HfApi().model_info(repository).sha
         started = join(directory, ".cache", "huggingface", "download")
         try:
             for name in files:
@@ -396,7 +415,8 @@ class OnnxASR(STT):
             raise RuntimeError(f"another process is downloading into "
                                f"'{directory}'") from held
         for name in files:
-            hf_hub_download(repository, name, revision=revision, local_dir=directory)
+            if not os.path.lexists(join(directory, *name.split("/"))):  # still not there
+                hf_hub_download(repository, name, revision=revision, local_dir=directory)
 
     def _evict_lru(self, headroom: int = 0):
         """
