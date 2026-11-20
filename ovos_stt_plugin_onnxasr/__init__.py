@@ -1,15 +1,8 @@
 import os
-import shutil
 from collections import OrderedDict
-from contextlib import ExitStack, contextmanager
 from os.path import join
 from threading import RLock
 from typing import List, Optional
-
-try:
-    import fcntl
-except ImportError:  # Windows: no advisory locks, one loader at a time is not enforced
-    fcntl = None
 
 import onnx_asr
 from ovos_plugin_manager.templates.stt import STT
@@ -236,19 +229,20 @@ class OnnxASR(STT):
     def _load(self, model_id: str, quantization: Optional[str],
               providers: Optional[List[str]]):
         """
-        Load ``model_id`` from its directory, downloading it again when a
-        download left the directory without a file the model needs.
+        Load ``model_id`` from its directory, and fetch what a download left
+        out of it.
 
         onnx-asr downloads only into a directory that does not exist yet. Once
         the directory exists it loads from it and never asks the network
         again. A download that was interrupted, or a directory that holds the
-        files of another ``quantization``, therefore fails with
-        ``ModelFileNotFoundError`` on every start, until someone removes the
-        directory by hand.
+        files of another ``quantization``, therefore fails on every start.
 
-        A directory that a download filled is removed and downloaded once
-        more. A directory somebody filled by hand is left as it is, and the
-        error is raised: there may be no repository to fetch it from again.
+        When the load fails that way, the missing files are downloaded into
+        the directory and the model is loaded once more. Nothing is removed:
+        the files that are there stay, and a directory that cannot be
+        completed (no network, no repository, a volume that cannot be
+        written) fails with the error it had before, as it did without this.
+        A directory somebody filled by hand is not touched at all.
         """
         directory = self._model_dir(model_id)
 
@@ -258,20 +252,27 @@ class OnnxASR(STT):
                                        quantization=quantization,
                                        providers=providers)
 
-        with self._one_loader(directory):
-            # onnx-asr only goes offline for a directory that is already there
-            offline = os.path.isdir(directory)
-            try:
-                return load()
-            except FileNotFoundError as missing:
-                if not (offline and self._was_downloaded(directory)):
-                    raise
-                LOG.warning(f"'{directory}' lacks a file the model needs "
-                            f"({missing}); removing it and downloading "
-                            f"'{model_id}' again")
-                if not self._removed(directory):
-                    raise
+        if not self._was_downloaded(directory):
+            # not there yet: onnx-asr downloads it. Or filled by hand: as it is.
             return load()
+        try:
+            return load()
+        except Exception as error:
+            # onnx-asr misses a graph: FileNotFoundError. It finds the graph
+            # but not the weights kept next to it: whatever onnxruntime raises,
+            # and the download shows a file it started and did not finish.
+            if not (isinstance(error, FileNotFoundError)
+                    or self._has_unfinished_files(directory)):
+                raise
+            LOG.warning(f"'{directory}' could not be loaded ({error}); "
+                        f"downloading the files of '{model_id}' it lacks")
+            try:
+                self._fetch_missing(model_id, directory, quantization)
+            except Exception as failure:
+                LOG.error(f"the missing files of '{model_id}' could not be "
+                          f"downloaded: {failure}")
+                raise error from failure
+        return load()
 
     @staticmethod
     def _was_downloaded(directory: str) -> bool:
@@ -282,42 +283,55 @@ class OnnxASR(STT):
         return os.path.isdir(join(directory, ".cache", "huggingface"))
 
     @staticmethod
-    def _removed(directory: str) -> bool:
+    def _has_unfinished_files(directory: str) -> bool:
         """
-        Remove ``directory``. False when it cannot be removed, for example on
-        a read-only volume: the caller then raises the error it already has.
+        Whether a download into ``directory`` started a file and did not
+        finish it. The Hugging Face client writes ``<file>.lock`` in its
+        bookkeeping when it starts a file and ``<file>.metadata`` when the
+        file is whole. (The ``*.incomplete`` parts are no sign: the client
+        leaves them behind after it has downloaded the file again.)
+
+        It can say yes for a file that nobody needs any more, for example of a
+        quantization that was dropped. The cost is one download attempt that
+        finds nothing to do, and only after a load has already failed.
         """
-        try:
-            shutil.rmtree(directory)
-        except OSError as error:
-            LOG.error(f"'{directory}' could not be removed ({error}); "
-                      f"remove it by hand to download the model again")
-            return False
-        return True
+        started = join(directory, ".cache", "huggingface", "download")
+        for _, _, names in os.walk(started):
+            finished = {name[:-len(".metadata")] for name in names
+                        if name.endswith(".metadata")}
+            if any(name.endswith(".lock") and name[:-len(".lock")] not in finished
+                   for name in names):
+                return True
+        return False
 
     @staticmethod
-    @contextmanager
-    def _one_loader(directory: str):
+    def _fetch_missing(model_id: str, directory: str,
+                       quantization: Optional[str]):
         """
-        Let one process at a time load from, or download into, ``directory``.
+        Download into ``directory`` the files of ``model_id`` that it lacks.
 
-        Two servers that share a volume would otherwise meet in it: the second
-        finds the first one's half-finished download, takes it for a broken
-        one and removes it. The lock is a file next to the directory. Where
-        that file cannot be made or locked (a read-only volume, a filesystem
-        or a platform without such locks), loading goes ahead without one: a
-        complete model on a read-only volume must load as it did before.
+        The files that are there are neither removed nor downloaded again, and
+        a part that had arrived is continued. Two servers that do this at the
+        same time on one volume wait for each other, file by file: the
+        Hugging Face client locks each file while it writes it.
         """
-        with ExitStack() as stack:
-            try:
-                os.makedirs(os.path.dirname(directory), exist_ok=True)
-                handle = stack.enter_context(open(directory + ".lock", "a"))
-                if fcntl is not None:
-                    fcntl.flock(handle, fcntl.LOCK_EX)
-            except OSError as error:
-                LOG.debug(f"no lock for '{directory}': {error}")
-            # leaving this block closes the file, which releases the lock
-            yield
+        # here and not at the top: both are only needed for a repair, and the
+        # plugin must load a complete model without either of them
+        from huggingface_hub import snapshot_download
+        from onnx_asr.loader import create_asr_resolver
+
+        # ``load_model`` goes offline for a directory that exists and has no
+        # argument to say otherwise; the resolver it uses has one
+        resolver = create_asr_resolver(model_id, directory, offline=False)
+        graphs = resolver.resolve_model(quantization=quantization)
+        # the resolver looks for the graphs only: weights kept in a file next
+        # to a graph (``model.onnx.data``) are asked for here
+        root = os.path.abspath(directory)
+        weights = [os.path.relpath(os.path.abspath(path), root).replace(os.sep, "/") + "?data"
+                   for path in graphs.values() if str(path).endswith(".onnx")]
+        if weights:
+            snapshot_download(resolver.repo_id, local_dir=directory,
+                              allow_patterns=weights)
 
     def _evict_lru(self, headroom: int = 0):
         """
