@@ -1,5 +1,6 @@
 import os
 from collections import OrderedDict
+from contextlib import contextmanager
 from os.path import join
 from threading import RLock
 from typing import List, Optional
@@ -243,6 +244,10 @@ class OnnxASR(STT):
         removed, replaced or downloaded again. If the files cannot be fetched,
         or if another process is downloading into the directory, the first
         error is raised, as it was without this.
+
+        A process that downloads into the directory, for the first time or to
+        finish, holds ``<directory>.lock`` while it does. The lock is only
+        ever tried: nobody waits for it.
         """
         directory = self._model_dir(model_id)
 
@@ -252,6 +257,12 @@ class OnnxASR(STT):
                                        quantization=quantization,
                                        providers=providers)
 
+        if not os.path.isdir(directory):
+            # onnx-asr downloads it now. The lock tells a server that starts in
+            # the meantime that this download is alive: without it, the files
+            # this download has started look like the rest of a dead one.
+            with self._download_lock(directory):
+                return load()
         try:
             return load()
         except Exception as error:
@@ -261,12 +272,45 @@ class OnnxASR(STT):
             LOG.warning(f"'{directory}' could not be loaded ({error}); its "
                         f"download stopped before {unfinished}, fetching them")
             try:
-                self._resume_download(model_id, directory, unfinished)
+                with self._download_lock(directory) as alone:
+                    if not alone:
+                        raise RuntimeError(f"another process is downloading into "
+                                           f"'{directory}', or its lock cannot be taken")
+                    self._resume_download(model_id, directory, unfinished)
             except Exception as failure:
                 LOG.error(f"the download of '{model_id}' could not be "
                           f"finished: {failure}")
                 raise error from failure
         return load()
+
+    @staticmethod
+    @contextmanager
+    def _download_lock(directory: str):
+        """
+        Try to be the one process that downloads into ``directory``: true when
+        this process holds ``<directory>.lock``, false when another one holds
+        it or when the lock cannot be taken at all (no ``filelock``, a volume
+        that cannot be written, a filesystem without such locks). It never
+        waits.
+        """
+        lock = None
+        try:
+            from filelock import FileLock, Timeout
+        except ImportError as error:
+            LOG.debug(f"no download lock for '{directory}': {error!r}")
+        else:
+            try:
+                os.makedirs(os.path.dirname(directory), exist_ok=True)
+                lock = FileLock(directory + ".lock", timeout=0)
+                lock.acquire()
+            except (Timeout, OSError, NotImplementedError) as error:
+                LOG.debug(f"no download lock for '{directory}': {error!r}")
+                lock = None
+        try:
+            yield lock is not None
+        finally:
+            if lock is not None:
+                lock.release()
 
     @staticmethod
     def _unfinished_files(directory: str) -> List[str]:
@@ -323,40 +367,36 @@ class OnnxASR(STT):
 
     def _resume_download(self, model_id: str, directory: str, files: List[str]):
         """
-        Download ``files`` into ``directory``, from the commit of the files
-        that are there.
+        Download ``files`` into ``directory``, all from one commit of the
+        model repository: that of the files that are there, or else the newest
+        one, asked once.
 
-        One process at a time does this, and none does it while a download
-        into the directory is running: the client decides whether to download
-        a file before it takes the lock of that file, so a second downloader
-        removes what the first has just finished and fetches it again. Both
-        checks only try the locks; a lock that is held is an error for the
-        caller, not something to wait for.
+        The caller holds the download lock. The client's own lock of each
+        file is tried as well, against a download by something that does not
+        take the plugin's lock: the client decides whether to download a file
+        before it locks it, so a second downloader removes what the first has
+        just finished and fetches it again.
         """
         # here and not at the top: only a repair needs them, and the plugin
         # must load a complete model where none of them is installed
         from filelock import FileLock, Timeout
-        from huggingface_hub import hf_hub_download
+        from huggingface_hub import HfApi, hf_hub_download
         from onnx_asr.loader import create_asr_resolver
 
         repository = create_asr_resolver(model_id, directory).repo_id
         if not repository:
             raise LookupError(f"'{model_id}' names no repository to download from")
-        revision = self._downloaded_revision(directory)
-        bookkeeping = join(directory, ".cache", "huggingface")
+        revision = self._downloaded_revision(directory) or HfApi().model_info(repository).sha
+        started = join(directory, ".cache", "huggingface", "download")
         try:
-            with FileLock(join(bookkeeping, "resume.lock"), timeout=0):
-                for name in files:
-                    # the client holds this lock while it downloads the file
-                    with FileLock(join(bookkeeping, "download", *name.split("/")) + ".lock",
-                                  timeout=0):
-                        pass
-                for name in files:
-                    hf_hub_download(repository, name, revision=revision,
-                                    local_dir=directory)
+            for name in files:
+                with FileLock(join(started, *name.split("/")) + ".lock", timeout=0):
+                    pass
         except Timeout as held:
             raise RuntimeError(f"another process is downloading into "
                                f"'{directory}'") from held
+        for name in files:
+            hf_hub_download(repository, name, revision=revision, local_dir=directory)
 
     def _evict_lru(self, headroom: int = 0):
         """

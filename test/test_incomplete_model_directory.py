@@ -25,6 +25,7 @@ WEIGHTS = "encoder-model.onnx.data"   # kept in a file next to its graph
 INT8 = ("encoder-model.int8.onnx", "decoder_joint-model.int8.onnx")
 FULL = ("config.json", *GRAPHS, WEIGHTS)
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
+NEWEST = "fedcba9876543210fedcba9876543210fedcba98"   # where the repository is today
 REPOSITORY = "someone/some-model"
 
 
@@ -41,21 +42,30 @@ class _Locks:
     def __init__(self):
         self.held = set()
         self.tried = []
+        self.broken = set()         # paths where no lock file can be made
 
     def FileLock(self, path, timeout=-1):
         locks = self
 
         class Lock:
-            def __enter__(self):
+            def acquire(self):
                 assert timeout == 0, "a lock must be tried, never waited for"
                 locks.tried.append(path)
+                if path in locks.broken:
+                    raise PermissionError(13, "Permission denied", path)
                 if path in locks.held:
                     raise locks.Timeout(path)
                 locks.held.add(path)
+
+            def release(self):
+                locks.held.discard(path)
+
+            def __enter__(self):
+                self.acquire()
                 return self
 
             def __exit__(self, *error):
-                locks.held.discard(path)
+                self.release()
 
         return Lock()
 
@@ -70,13 +80,16 @@ class _Hub:
     file that was in the directory.
     """
 
-    def __init__(self, needs=FULL, repository=REPOSITORY):
+    def __init__(self, needs=FULL, repository=REPOSITORY, locks=None):
         self.needs = needs          # what the configured quantization loads
         self.repository = repository
+        self.locks = locks
         self.online = True
         self.fetched = []           # (repository, file, revision) of each download
         self.loads = 0
         self.resolvers = 0
+        self.asked_for_newest = 0
+        self.first_downloads = []   # (directory, whether the download lock was held)
 
     @staticmethod
     def put(directory, finished, unfinished=(), commit=COMMIT):
@@ -100,6 +113,9 @@ class _Hub:
 
     def load_model(self, model_id, path=None, **kwargs):
         self.loads += 1
+        if not os.path.isdir(path):            # onnx-asr downloads into a directory that is not there
+            self.first_downloads.append((path, path + ".lock" in self.locks.held))
+            self.put(path, self.needs)
         for name in self.needs:
             if not os.path.isfile(os.path.join(path, name)):
                 if name.endswith(".onnx") or name == "config.json":
@@ -114,9 +130,16 @@ class _Hub:
         self.resolvers += 1
         return types.SimpleNamespace(repo_id=self.repository)
 
+    def model_info(self, repo_id):
+        if not self.online:
+            raise ConnectionError("no route to the hub")
+        self.asked_for_newest += 1
+        return types.SimpleNamespace(sha=NEWEST)
+
     def hf_hub_download(self, repo_id, filename, *, revision=None, local_dir=None):
         if not self.online:
             raise ConnectionError("no route to the hub")
+        assert revision, "a file was asked for without a commit: two files could then differ"
         self.fetched.append((repo_id, filename, revision))
         Path(local_dir, filename).parent.mkdir(parents=True, exist_ok=True)
         Path(local_dir, filename).write_text(f"resumed download of {filename}")
@@ -136,7 +159,8 @@ class TestIncompleteModelDirectory(unittest.TestCase):
     def _stt(self, hub, filelock=None):
         modules = patch.dict(sys.modules, {
             "onnx_asr.loader": types.SimpleNamespace(create_asr_resolver=hub.create_asr_resolver),
-            "huggingface_hub": types.SimpleNamespace(hf_hub_download=hub.hf_hub_download),
+            "huggingface_hub": types.SimpleNamespace(hf_hub_download=hub.hf_hub_download,
+                                                     HfApi=lambda: hub),
             "filelock": filelock or types.SimpleNamespace(FileLock=self.locks.FileLock,
                                                           Timeout=self.locks.Timeout),
         })
@@ -189,11 +213,29 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         self.assertEqual(hub.fetched, [(REPOSITORY, WEIGHTS, COMMIT)])
         self.assertEqual(self._contents()[GRAPHS[0]], "mine")
 
-    def test_when_no_file_was_finished_the_newest_revision_is_taken(self):
+    def test_when_no_file_was_finished_every_file_comes_from_one_newest_commit(self):
         hub = _Hub()
         hub.put(self.directory, (), unfinished=FULL)
         self._stt(hub)
-        self.assertEqual(hub.fetched, [(REPOSITORY, name, None) for name in sorted(FULL)])
+        self.assertEqual(hub.fetched, [(REPOSITORY, name, NEWEST) for name in sorted(FULL)])
+        self.assertEqual(hub.asked_for_newest, 1, "the commit must be asked once, not per file")
+
+    def test_a_first_download_holds_the_download_lock(self):
+        hub = _Hub(locks=self.locks)
+        self.assertIn("some-model", self._stt(hub)._models)
+        self.assertEqual(hub.first_downloads, [(self.directory, True)])
+        self.assertEqual(self.locks.held, set(), "the lock was kept after the load")
+
+    def test_a_first_download_goes_on_without_the_lock_as_it_always_did(self):
+        for reason in ("held", "broken"):      # another server has it; no lock file can be made
+            with self.subTest(reason=reason):
+                shutil.rmtree(self.directory, ignore_errors=True)
+                locks = _Locks()
+                getattr(locks, reason).add(self.directory + ".lock")
+                self.locks = locks
+                hub = _Hub(locks=locks)
+                self.assertIn("some-model", self._stt(hub)._models)
+                self.assertEqual(hub.first_downloads, [(self.directory, reason == "held")])
 
     def test_a_file_in_a_subdirectory_of_the_repository(self):
         hub = _Hub(needs=("config.json", "onnx/encoder.onnx"))
@@ -210,6 +252,7 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         hub.online = False
         self._stt(hub)
         self.assertEqual((hub.loads, hub.resolvers, hub.fetched, self.locks.tried), (1, 0, [], []))
+        self.assertEqual(os.listdir(self.root), ["some-model"], "something was written next to the model")
 
     def test_another_failure_asks_nothing(self):
         hub = _Hub()
@@ -275,10 +318,17 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         self.locks.held.add(bookkeeping(self.directory, "download", WEIGHTS + ".lock"))
         self._fails_as_before(hub, FileNotFoundError, RuntimeError)
 
-    def test_one_process_at_a_time_finishes_a_download(self):
+    def test_while_another_process_holds_the_download_lock_nothing_is_fetched(self):
+        # it makes its first download, or it finishes this one
         hub = _Hub()
         hub.put(self.directory, ("config.json", GRAPHS[0]), unfinished=(GRAPHS[1], WEIGHTS))
-        self.locks.held.add(bookkeeping(self.directory, "resume.lock"))
+        self.locks.held.add(self.directory + ".lock")
+        self._fails_as_before(hub, FileNotFoundError, RuntimeError)
+
+    def test_without_a_lock_nothing_is_fetched(self):
+        hub = _Hub()
+        hub.put(self.directory, ("config.json", GRAPHS[0]), unfinished=(GRAPHS[1], WEIGHTS))
+        self.locks.broken.add(self.directory + ".lock")
         self._fails_as_before(hub, FileNotFoundError, RuntimeError)
 
     @unittest.skipUnless(importlib.util.find_spec("filelock"), "filelock is not installed")
@@ -286,12 +336,13 @@ class TestIncompleteModelDirectory(unittest.TestCase):
         import filelock
         hub = _Hub()
         hub.put(self.directory, ("config.json", *GRAPHS), unfinished=(WEIGHTS,))
-        downloading = filelock.FileLock(bookkeeping(self.directory, "download", WEIGHTS + ".lock"))
-        with downloading:                      # as the client holds it while it writes the file
-            with self.assertRaises(RuntimeError) as raised:
-                self._stt(hub, filelock=filelock)
-            self.assertIn("another process", str(raised.exception.__cause__))
-            self.assertEqual(hub.fetched, [])
+        for held in (self.directory + ".lock",                               # another server's download
+                     bookkeeping(self.directory, "download", WEIGHTS + ".lock")):   # the client, on this file
+            with self.subTest(held=os.path.basename(held)), filelock.FileLock(held):
+                with self.assertRaises(RuntimeError) as raised:
+                    self._stt(hub, filelock=filelock)
+                self.assertIn("another process", str(raised.exception.__cause__))
+                self.assertEqual(hub.fetched, [])
         self._stt(hub, filelock=filelock)      # the download died: now it is finished
         self.assertEqual(hub.fetched, [(REPOSITORY, WEIGHTS, COMMIT)])
 
