@@ -63,6 +63,7 @@ A registry model whose repository holds no quantized weights loads fp32, even wi
 | `model_dir` | `<XDG data home>/ovos_stt_plugin_onnxasr` | Root directory for the model files, one plain directory per model. A download into it that was cut short is finished at the next start: the files that the download had started are fetched, from the same revision, and no file that is in the directory is touched. If they cannot be fetched (no network, a volume that the server cannot write to, another server that downloads into the directory), the load fails with the same error as before. A server holds `<model>.lock` next to the model's directory while it downloads into it. A directory that holds the files of another `quantization`, or that you filled by hand, also fails as before: give each `quantization` its own `model_dir`. |
 | `use_cuda` | `false` | Run on the GPU via the CUDA execution provider (with a CPU fallback). |
 | `providers` | `null` | Explicit list of onnxruntime execution providers, e.g. `["CUDAExecutionProvider", "CPUExecutionProvider"]` or `["TensorrtExecutionProvider"]`. Takes precedence over `use_cuda`. |
+| `pad_to_seconds` | `null` | Pad each request's audio with silence up to the next multiple of this many seconds, e.g. `4`, so that most requests reach the model with the same length. For the CUDA execution provider. See below. |
 | `cpu_models_only` | `false` | Restrict model selection to models practical on CPU-only hardware. See below. |
 
 ### CPU-only deployments
@@ -110,6 +111,36 @@ To run on the GPU, install `onnxruntime-gpu` (in place of the default `onnxrunti
 ```
 
 For finer control (e.g. TensorRT) set `providers` directly; it overrides `use_cuda`.
+
+#### Steady response times on the GPU
+
+With the CUDA execution provider, a request whose audio is not as long as the request before it takes longer: onnxruntime sets the model's convolutions up again for the new length. Voice commands all differ in length, so a server pays this on nearly every request. `pad_to_seconds` pads each request's audio with silence up to the next multiple of the given length, which gives most requests the same one:
+
+```json
+{
+  "stt": {
+    "module": "ovos-stt-plugin-onnx-asr",
+    "ovos-stt-plugin-onnx-asr": {
+      "model": "nemo-parakeet-tdt-0.6b-v3",
+      "use_cuda": true,
+      "pad_to_seconds": 4
+    }
+  }
+}
+```
+
+Measured with `nemo-parakeet-tdt-0.6b-v3` on a Tesla P40 (onnxruntime-gpu 1.29.0, CUDA 12.9) through ovos-stt-http-server: twelve commands of twelve lengths between 1.4 and 3.8 s, one request a second, three alternating rounds.
+
+| | Median | Slowest |
+| --- | --- | --- |
+| unset | 559 ms | 737 ms |
+| `"pad_to_seconds": 4` | 186 ms | 251 ms |
+
+Before turning it on:
+
+- Pick a length most of your requests fit in. Audio longer than it is padded to the next multiple, and a request of another length is slow once more, as is the request after it.
+- The silence can change what a model writes. `nemo-parakeet-tdt-0.6b-v3` recognised the same words in 18 of 18 whole commands with and without it, but wrote 4 of them differently ("ten minutes" became "10 minutes") and moved punctuation or capitals in 2 more.
+- It was measured on the CUDA provider and with this one model only. On CPU, longer audio is more work, so leave it unset there unless you measure a gain.
 
 ## Supported Models
 
