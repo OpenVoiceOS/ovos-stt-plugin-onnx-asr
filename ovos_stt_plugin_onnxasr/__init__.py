@@ -1,4 +1,6 @@
+import os
 from collections import OrderedDict
+from contextlib import contextmanager
 from os.path import join
 from threading import RLock
 from typing import List, Optional
@@ -165,10 +167,7 @@ class OnnxASR(STT):
         if providers:
             LOG.info(f"onnx-asr using providers: {providers}")
         LOG.info(f"loading onnx-asr model: {model_id}")
-        model = onnx_asr.load_model(model_id,
-                                    path=self._model_dir(model_id),
-                                    quantization=quantization,
-                                    providers=providers)
+        model = self._load(model_id, quantization, providers)
         # onnx-asr accepts a `language` hint only for Whisper and Canary
         # models, and `target_language` only for Canary. Passing them to
         # other architectures is outside the RecognizeOptions contract,
@@ -227,6 +226,197 @@ class OnnxASR(STT):
         root = self.config.get("model_dir") or join(
             xdg_data_home(), "ovos_stt_plugin_onnxasr")
         return join(root, model_id.replace("/", "--"))
+
+    def _load(self, model_id: str, quantization: Optional[str],
+              providers: Optional[List[str]]):
+        """
+        Load ``model_id`` from its directory, and finish a download that was
+        cut short.
+
+        onnx-asr downloads only into a directory that does not exist yet. Once
+        the directory exists it loads from it and never asks the network
+        again. A download that was interrupted therefore fails on every start,
+        until someone removes the directory by hand.
+
+        When a load fails and the download's own bookkeeping shows files that
+        it started and did not finish, exactly those files are downloaded, and
+        the model is loaded once more. No file that is in the directory is
+        removed, replaced or downloaded again. If the files cannot be fetched,
+        or if another process is downloading into the directory, the first
+        error is raised, as it was without this.
+
+        A process that downloads into the directory, for the first time or to
+        finish, holds ``<directory>.lock`` while it does. The lock is only
+        ever tried: nobody waits for it. A process that finds it held does
+        not download; it fails at once.
+        """
+        directory = self._model_dir(model_id)
+
+        def load():
+            return onnx_asr.load_model(model_id,
+                                       path=directory,
+                                       quantization=quantization,
+                                       providers=providers)
+
+        if not os.path.isdir(directory):
+            # onnx-asr downloads it now. The lock tells a server that starts in
+            # the meantime that this download is alive: without it, the files
+            # this download has started look like the rest of a dead one.
+            with self._download_lock(directory) as alone:
+                if alone is False:
+                    # the directory is about to appear: a second download into it
+                    # would remove what the first one has just written
+                    raise RuntimeError(f"another process is downloading "
+                                       f"'{model_id}' into '{directory}'")
+                return load()  # also without a lock, as it always did
+        try:
+            return load()
+        except Exception as error:
+            unfinished = self._unfinished_files(directory)
+            if not unfinished:
+                raise
+            LOG.warning(f"'{directory}' could not be loaded ({error}); its "
+                        f"download stopped before {unfinished}, fetching them")
+            try:
+                with self._download_lock(directory) as alone:
+                    if not alone:
+                        raise RuntimeError(f"another process is downloading into "
+                                           f"'{directory}', or its lock cannot be taken")
+                    self._resume_download(model_id, directory, unfinished)
+            except Exception as failure:
+                LOG.error(f"the download of '{model_id}' could not be "
+                          f"finished: {failure}")
+                raise error from failure
+        return load()
+
+    @staticmethod
+    @contextmanager
+    def _download_lock(directory: str):
+        """
+        Try to be the one process that downloads into ``directory``. True when
+        this process holds ``<directory>.lock``; False when another one holds
+        it; None when there is no lock to hold (no ``filelock``, a volume that
+        cannot be written, a filesystem without such locks). It never waits.
+        """
+        lock, alone = None, None
+        try:
+            from filelock import FileLock, Timeout
+        except ImportError as error:
+            LOG.debug(f"no download lock for '{directory}': {error!r}")
+        else:
+            try:
+                os.makedirs(os.path.dirname(directory), exist_ok=True)
+                lock = FileLock(directory + ".lock", timeout=0)
+                lock.acquire()
+                alone = True
+            except Timeout:
+                lock, alone = None, False
+            except (OSError, NotImplementedError) as error:
+                LOG.debug(f"no download lock for '{directory}': {error!r}")
+                lock = None
+        try:
+            yield alone
+        finally:
+            if lock is not None:
+                lock.release()
+
+    @staticmethod
+    def _unfinished_files(directory: str) -> List[str]:
+        """
+        The files that a download into ``directory`` started and did not
+        finish, as paths relative to it with ``/`` between the parts.
+
+        The Hugging Face client keeps its bookkeeping in
+        ``.cache/huggingface/download``: ``<file>.lock`` from the moment it
+        starts a file, ``<file>.metadata`` once the file is whole. A file that
+        is in the directory is never named here, whatever the bookkeeping
+        says. (The ``*.incomplete`` parts are no sign: the client leaves them
+        behind when it downloads a file again.)
+
+        Empty for a directory that somebody filled by hand, and where the
+        client removes its lock files (Windows): nothing is resumed there.
+        """
+        started = join(directory, ".cache", "huggingface", "download")
+        unfinished = []
+        for folder, _, names in os.walk(started):
+            for name in names:
+                if not name.endswith(".lock"):
+                    continue
+                path = os.path.relpath(join(folder, name[:-len(".lock")]), started)
+                if name[:-len(".lock")] + ".metadata" not in names \
+                        and not os.path.lexists(join(directory, path)):
+                    unfinished.append(path.replace(os.sep, "/"))
+        return sorted(unfinished)
+
+    @staticmethod
+    def _downloaded_revision(directory: str) -> Optional[str]:
+        """
+        The commit of the model repository that the files in ``directory``
+        were downloaded from: the first line of each ``<file>.metadata``.
+
+        None when no file was finished, so there is nothing to agree with.
+        ``LookupError`` when the files do not come from one commit: a file
+        added to them could then belong to none of them.
+        """
+        started = join(directory, ".cache", "huggingface", "download")
+        commits = set()
+        for folder, _, names in os.walk(started):
+            for name in names:
+                if name.endswith(".metadata"):
+                    with open(join(folder, name), encoding="utf-8") as record:
+                        commits.add(record.readline().strip())
+        if not commits:
+            return None
+        commit = commits.pop()
+        if commits or len(commit) != 40 or not set(commit) <= set("0123456789abcdef"):
+            raise LookupError(f"the files in '{directory}' do not name one "
+                              f"commit of their repository")
+        return commit
+
+    def _resume_download(self, model_id: str, directory: str, files: List[str]):
+        """
+        Download ``files`` into ``directory``, all from one commit of the
+        model repository: that of the files that are there, or else the newest
+        one, asked once.
+
+        The caller holds the download lock. The client's own lock of each
+        file is tried as well, against a download by something that does not
+        take the plugin's lock: the client decides whether to download a file
+        before it locks it, so a second downloader removes what the first has
+        just finished and fetches it again.
+        """
+        # here and not at the top: only a repair needs them, and the plugin
+        # must load a complete model where none of them is installed
+        from filelock import FileLock, Timeout
+        from huggingface_hub import HfApi, hf_hub_download
+        from onnx_asr.loader import create_asr_resolver
+
+        # a name with a slash is the repository, as it is for onnx-asr. Its
+        # resolver is not asked then: it reads config.json, which may be one of
+        # the files to fetch.
+        repository = model_id if "/" in model_id \
+            else create_asr_resolver(model_id, directory).repo_id
+        if not repository:
+            raise LookupError(f"'{model_id}' names no repository to download from")
+        revision = self._downloaded_revision(directory)
+        if revision is None:
+            # the client writes a file's metadata after the file: a file with no
+            # record may come from a commit that is not the newest any more
+            if any(name != ".cache" for name in os.listdir(directory)):
+                raise LookupError(f"'{directory}' holds files and no record of "
+                                  f"the commit they came from")
+            revision = HfApi().model_info(repository).sha
+        started = join(directory, ".cache", "huggingface", "download")
+        try:
+            for name in files:
+                with FileLock(join(started, *name.split("/")) + ".lock", timeout=0):
+                    pass
+        except Timeout as held:
+            raise RuntimeError(f"another process is downloading into "
+                               f"'{directory}'") from held
+        for name in files:
+            if not os.path.lexists(join(directory, *name.split("/"))):  # still not there
+                hf_hub_download(repository, name, revision=revision, local_dir=directory)
 
     def _evict_lru(self, headroom: int = 0):
         """
