@@ -9,8 +9,7 @@ on:
       - Dockerfile
       - docker-entrypoint.sh
       - .dockerignore
-      - setup.py
-      - requirements.txt
+      - pyproject.toml
       - .github/workflows/docker.yml
   workflow_dispatch:
 
